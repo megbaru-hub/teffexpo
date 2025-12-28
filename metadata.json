@@ -1,0 +1,7 @@
+{
+  "name": "TeffExpo",
+  "description": "A specialized marketplace for Ethiopian merchants to sell premium Teff directly to customers with multi-language support (Amharic/English) and mobile banking integration.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
