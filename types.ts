@@ -111,4 +111,6 @@ export interface Translation {
   myProducts: string;
   stock: string;
   price: string;
+  viewOnMap: string;
+  subtotal: string;
 }

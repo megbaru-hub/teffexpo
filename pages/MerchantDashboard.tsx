@@ -414,4 +414,3 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
 };
 
 export default MerchantDashboard;
-

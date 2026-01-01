@@ -1,5 +1,5 @@
-// Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+// Base API configuration - using Vite proxy
+const API_BASE_URL = '/api/v1';
 
 // API Error class
 export class ApiError extends Error {

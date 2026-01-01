@@ -66,7 +66,7 @@ const Checkout: React.FC<CheckoutProps> = ({ t }) => {
         orderData.items = items;
       }
 
-      await ordersApi.create(orderData);
+      await ordersApi.createOrder(orderData);
 
       await clearCart();
       alert('Order placed successfully!');

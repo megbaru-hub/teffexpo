@@ -82,7 +82,9 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     myItems: "የእኔ ንጥሎች",
     myProducts: "የእኔ ምርቶች",
     stock: "ክምችት",
-    price: "ዋጋ"
+    price: "ዋጋ",
+    viewOnMap: "በካርታው ላይ ይመልከቱ",
+    subtotal: "ከታክስ በፊት ዋጋ"
   },
   [Language.ENGLISH]: {
     title: "TeffExpo",
@@ -164,7 +166,9 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     myItems: "My Items",
     myProducts: "My Products",
     stock: "Stock",
-    price: "Price"
+    price: "Price",
+    viewOnMap: "View on Map",
+    subtotal: "Subtotal"
   }
 };
 

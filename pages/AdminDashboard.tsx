@@ -244,4 +244,3 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ t }) => {
 };
 
 export default AdminDashboard;
-
