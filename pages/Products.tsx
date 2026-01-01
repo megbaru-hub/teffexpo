@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+// Remove unused Link import
 import { Language, Translation, TeffType } from '../types';
 import { productsApi, ApiError } from '../services/api';
 import { useCart } from '../contexts/CartContext';
@@ -86,11 +86,16 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
     return acc;
   }, {} as Record<string, { merchant: any; products: Product[] }>);
 
+  const pageTitle = lang === Language.AMHARIC ? 'የእኛ ምርቶች' : 'Our Products';
+  const verifiedText = lang === Language.AMHARIC ? 'ተረጋግ' : 'Verified';
+  const loadingText = lang === Language.AMHARIC ? 'ምርቶች በመጫን ላይ...' : 'Loading products...';
+  const currency = 'ETB'; // Assuming ETB is the currency
+
   if (loading) {
     return (
       <div className="space-y-12">
         <div className="text-center py-12">
-          <p className="text-stone-500">Loading products...</p>
+          <p className="text-stone-500">{loadingText}</p>
         </div>
       </div>
     );
@@ -100,9 +105,9 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
     <div className="space-y-12">
       {/* Products Listing */}
       <section className="py-12">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold text-stone-800 mb-8">Browse Teff Products</h1>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold text-stone-800 mb-8">{pageTitle}</h1>
+          <div className="space-y-8">
             {Object.values(productsByMerchant).map(({ merchant, products: merchantProducts }) => (
               <div key={merchant._id} className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
@@ -121,7 +126,7 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                     <h3 className="text-lg font-bold text-stone-800">{merchant.name}</h3>
                   </div>
                   <div className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded-md font-bold uppercase tracking-wider self-center">
-                    Verified
+                    {verifiedText}
                   </div>
                 </div>
 
@@ -130,15 +135,18 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                     <div key={product._id} className="flex items-center justify-between border-b border-stone-50 pb-3">
                       <div>
                         <p className="font-medium text-stone-700">
-                          {product.teffType === 'White' ? 'White Teff' : product.teffType === 'Red' ? 'Red Teff' : 'Mixed Teff'}
+                          {product.teffType === 'White' ? t.whiteTeff : 
+                           product.teffType === 'Red' ? t.redTeff : t.mixedTeff}
                         </p>
                         <p className="text-sm text-stone-500">
-                          {product.pricePerKilo} ETB / kg
+                          {product.pricePerKilo} {currency} / {t.kilo}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className={`text-xs mb-1 ${product.stockAvailable > 0 ? 'text-stone-400' : 'text-red-400'}`}>
-                          {product.stockAvailable > 0 ? `${product.stockAvailable} kg in stock` : 'Out of stock'}
+                          {product.stockAvailable > 0 
+                            ? `${product.stockAvailable} ${t.kilo} ${t.stockAvailable}` 
+                            : t.noStock}
                         </p>
                         <button
                           disabled={product.stockAvailable <= 0}
@@ -149,7 +157,7 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                               : 'bg-stone-100 text-stone-400 cursor-not-allowed'
                           }`}
                         >
-                          Add to Cart
+                          {t.buyNow}
                         </button>
                       </div>
                     </div>
@@ -168,14 +176,22 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-stone-800">
-                  {selectedProduct.teffType === 'White' ? 'White Teff' : selectedProduct.teffType === 'Red' ? 'Red Teff' : 'Mixed Teff'}
+                  {selectedProduct.teffType === 'White' ? t.whiteTeff : 
+                   selectedProduct.teffType === 'Red' ? t.redTeff : t.mixedTeff}
                 </h2>
-                <button onClick={() => setShowModal(false)} className="text-stone-400 hover:text-stone-600 text-xl">✕</button>
+                <button 
+                  onClick={() => setShowModal(false)} 
+                  className="text-stone-400 hover:text-stone-600 text-xl"
+                >
+                  ✕
+                </button>
               </div>
 
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-stone-500 mb-2">Quantity (kg)</label>
+                  <label className="block text-sm font-medium text-stone-500 mb-2">
+                    {t.quantity} ({t.kilo})
+                  </label>
                   <div className="flex items-center gap-4">
                     <button
                       onClick={() => setQuantity(Math.max(0.5, quantity - 0.5))}
@@ -202,15 +218,17 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                 </div>
 
                 <div className="bg-stone-50 p-4 rounded-2xl flex justify-between items-center">
-                  <span className="text-stone-500 font-medium">Total Price</span>
-                  <span className="text-2xl font-black text-amber-700">{(quantity * selectedProduct.pricePerKilo).toFixed(2)} ETB</span>
+                  <span className="text-stone-500 font-medium">{t.totalPrice}</span>
+                  <span className="text-2xl font-black text-amber-700">
+                    {(quantity * selectedProduct.pricePerKilo).toFixed(2)} {currency}
+                  </span>
                 </div>
 
                 <button
                   onClick={handleAddToCart}
                   className="w-full bg-amber-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-amber-700 transition-all"
                 >
-                  Add to Cart
+                  {t.addToCart}
                 </button>
               </div>
             </div>

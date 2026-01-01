@@ -187,13 +187,51 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
                 <div key={order._id} className="p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-lg font-bold text-stone-800">{t.orders} #{order._id.slice(-6)}</h3>
-                      <p className="text-sm text-stone-500 mt-1">
-                        {t.customer}: {order.customer.name} ({order.customer.phone})
-                      </p>
-                      <p className="text-sm text-stone-500">
-                        {order.customer.address}, {order.customer.kebele}
-                      </p>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold">
+                          {order.customer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-stone-800">{t.orders} <span className="font-mono text-amber-600">#{order._id.slice(-6)}</span></h3>
+                          <p className="text-sm text-stone-500">{new Date(order.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-1">
+                        <div className="flex items-center text-sm">
+                          <svg className="w-4 h-4 mr-2 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span className="font-medium text-stone-700">{order.customer.name}</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <svg className="w-4 h-4 mr-2 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          <a href={`tel:${order.customer.phone}`} className="text-blue-600 hover:underline">
+                            {order.customer.phone}
+                          </a>
+                        </div>
+                        <div className="flex items-start text-sm">
+                          <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <div>
+                            <p className="text-stone-700">{order.customer.address}</p>
+                            <p className="text-stone-500">{order.customer.kebele}</p>
+                          </div>
+                        </div>
+                        {order.customer.googleMapsLink && (
+                          <div className="flex items-center text-sm">
+                            <svg className="w-4 h-4 mr-2 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                            </svg>
+                            <a href={order.customer.googleMapsLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                              View on Map <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.myStatus === 'completed' ? 'bg-green-100 text-green-700' :
@@ -220,14 +258,51 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
                     </div>
                   </div>
 
-                  {order.myStatus === 'pending' && (
-                    <button
-                      onClick={() => handleConfirmOrder(order._id)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700"
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {order.myStatus === 'pending' ? (
+                      <button
+                        onClick={() => handleConfirmOrder(order._id)}
+                        className="px-4 py-2 rounded-lg font-medium text-sm flex items-center bg-amber-600 text-white hover:bg-amber-700"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {t.confirmOrder}
+                      </button>
+                    ) : (
+                      <div className="px-4 py-2 rounded-lg font-medium text-sm flex items-center bg-green-100 text-green-700">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {t.completed}
+                      </div>
+                    )}
+                    
+                    <a 
+                      href={`tel:${order.customer.phone}`}
+                      className="px-4 py-2 bg-white border border-stone-200 rounded-lg font-medium text-sm flex items-center hover:bg-stone-50"
                     >
-                      {t.confirmOrder}
-                    </button>
-                  )}
+                      <svg className="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      {t.callCustomer}
+                    </a>
+                    
+                    {order.customer.googleMapsLink && (
+                      <a 
+                        href={order.customer.googleMapsLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-white border border-stone-200 rounded-lg font-medium text-sm flex items-center hover:bg-stone-50"
+                      >
+                        <svg className="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {t.viewOnMap}
+                      </a>
+                    )}
+                  </div>
                 </div>
               ))
             )}

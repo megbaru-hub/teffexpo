@@ -113,4 +113,5 @@ export interface Translation {
   price: string;
   viewOnMap: string;
   subtotal: string;
+  callCustomer: string;
 }
