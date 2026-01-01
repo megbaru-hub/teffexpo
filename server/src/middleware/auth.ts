@@ -12,7 +12,7 @@ declare global {
 }
 
 // Protect routes
-export const protect = async (req: Request, res: Response, next: NextFunction) => {
+export const protect = async (req: Request, _res: Response, next: NextFunction) => {
   try {
     let token;
 
@@ -22,7 +22,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     ) {
       // Set token from Bearer token in header
       token = req.headers.authorization.split(' ')[1];
-    } 
+    }
     // Set token from cookie
     else if (req.cookies.token) {
       token = req.cookies.token;
@@ -39,13 +39,13 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key') as { id: string };
       const user = await User.findById(decoded.id);
-      
+
       if (!user) {
         return next(
           new ErrorResponse('User no longer exists', 401)
         );
       }
-      
+
       req.user = user;
       next();
     } catch (err) {
@@ -60,7 +60,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
 
 // Grant access to specific roles
 export const authorize = (...roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
       return next(
         new ErrorResponse('Not authorized to access this route', 401)

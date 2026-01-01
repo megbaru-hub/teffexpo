@@ -16,7 +16,7 @@ export class ApiError extends Error {
 
 // Helper function for making API requests
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
-  const headers = {
+  const headers: any = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
@@ -26,7 +26,14 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  // Handle query parameters
+  let url = `${API_BASE_URL}${endpoint}`;
+  if (options.method === 'GET' && (options as any).params) {
+    const params = new URLSearchParams((options as any).params);
+    url += `?${params.toString()}`;
+  }
+
+  const response = await fetch(url, {
     ...options,
     headers,
     credentials: 'include',
@@ -36,7 +43,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     throw new ApiError(
-      data.message || 'Something went wrong',
+      data.error || data.message || 'Something went wrong',
       response.status,
       data.errors
     );
@@ -47,7 +54,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
   if (data.token !== undefined) {
     return data;
   }
-  
+
   // Extract data property if response has { success: true, data: ... } format
   // Otherwise return the whole response
   return data.data !== undefined ? data.data : data;
@@ -81,7 +88,7 @@ export const authApi = {
 
 // Products API
 export const productsApi = {
-  getAll: () => apiRequest('/products'),
+  getAll: (params?: any) => apiRequest('/products', { method: 'GET', params } as any),
   getById: (id: string) => apiRequest(`/products/${id}`),
   create: (productData: any) =>
     apiRequest('/products', {
@@ -195,11 +202,21 @@ export const merchantApi = {
 
   // Orders
   getMerchantOrders: () => apiRequest('/merchant/orders'),
+  getAssignedOrders: () => apiRequest('/merchant/orders'),
+  confirmOrder: (orderId: string) =>
+    apiRequest(`/merchant/orders/${orderId}/confirm`, { method: 'PUT' }),
   updateOrderStatus: (orderId: string, status: string) =>
     apiRequest(`/merchant/orders/${orderId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
+
+  // Notifications
+  getNotifications: () => apiRequest('/merchant/notifications'),
+  markNotificationRead: (id: string) =>
+    apiRequest(`/merchant/notifications/${id}/read`, { method: 'PUT' }),
+  markAllNotificationsRead: () =>
+    apiRequest('/merchant/notifications/read-all', { method: 'PUT' }),
 
   // Analytics
   getMerchantAnalytics: () => apiRequest('/merchant/analytics'),

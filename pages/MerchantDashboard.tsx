@@ -17,6 +17,16 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'notifications'>('orders');
 
+  // Add Product State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    teffType: 'White',
+    pricePerKilo: '',
+    stockAvailable: '',
+    description: ''
+  });
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -73,6 +83,36 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
       fetchData();
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);
+    }
+  };
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await productsApi.create({
+        teffType: newProduct.teffType,
+        pricePerKilo: Number(newProduct.pricePerKilo),
+        stockAvailable: Number(newProduct.stockAvailable),
+        description: newProduct.description
+      });
+      alert('Product created successfully!');
+      setShowAddModal(false);
+      setNewProduct({
+        teffType: 'White',
+        pricePerKilo: '',
+        stockAvailable: '',
+        description: ''
+      });
+      fetchData();
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        alert(error.message);
+      } else {
+        alert('Failed to create product');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -197,7 +237,18 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
 
       {activeTab === 'products' && (
         <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6">
-          <h2 className="text-xl font-bold text-stone-800 mb-4">{t.myProducts}</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-stone-800">{t.myProducts}</h2>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-700 flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Add Product
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {products.map((product) => (
               <div key={product._id} className="border border-stone-200 rounded-xl p-4">
@@ -259,6 +310,102 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Product Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-stone-800">Add New Product</h2>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddProduct} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  Teff Type
+                </label>
+                <select
+                  value={newProduct.teffType}
+                  onChange={(e) => setNewProduct({ ...newProduct, teffType: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                >
+                  <option value="White">White Teff</option>
+                  <option value="Red">Red Teff</option>
+                  <option value="Mixed">Mixed Teff</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  Price per Kilo (ETB)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={newProduct.pricePerKilo}
+                  onChange={(e) => setNewProduct({ ...newProduct, pricePerKilo: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  Available Stock (Kg)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={newProduct.stockAvailable}
+                  onChange={(e) => setNewProduct({ ...newProduct, stockAvailable: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={newProduct.description}
+                  onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                  rows={3}
+                  placeholder="Product details..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl font-bold text-stone-600 border-2 border-stone-100 hover:bg-stone-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-3 rounded-xl font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Creating...' : 'Create Product'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

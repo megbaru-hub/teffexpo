@@ -1,10 +1,15 @@
+import dotenv from 'dotenv';
+// Load environment variables
+dotenv.config({ path: `${__dirname}/../.env` });
+
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import morgan from 'morgan';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
+
+
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
@@ -19,9 +24,6 @@ import cartRoutes from './routes/cart';
 import orderRoutes from './routes/orders';
 import adminRoutes from './routes/admin';
 import merchantRoutes from './routes/merchant';
-
-// Load environment variables
-dotenv.config({ path: `${__dirname}/../.env` });
 
 // Check for required environment variables
 const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI'] as const;
@@ -114,7 +116,7 @@ process.on('uncaughtException', (err: Error) => {
   console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
   console.error('Error:', err.name, err.message);
   console.error(err.stack);
-  
+
   // Give the server time to log the error before shutting down
   setTimeout(() => {
     process.exit(1);
@@ -123,7 +125,8 @@ process.on('uncaughtException', (err: Error) => {
 
 // Initialize MongoDB connection
 mongoose.connection.on('connected', () => {
-  console.log('✅ Connected to MongoDB');});
+  console.log('✅ Connected to MongoDB');
+});
 
 mongoose.connection.on('error', (err: Error) => {
   console.error('❌ MongoDB connection error:', err);
@@ -137,7 +140,7 @@ const startServer = async () => {
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
       family: 4, // Use IPv4, skip trying IPv6
     });
-    
+
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`🔄 NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
@@ -147,7 +150,7 @@ const startServer = async () => {
     process.on('unhandledRejection', (reason: Error | any, promise: Promise<any>) => {
       console.error('UNHANDLED REJECTION! 💥 Shutting down...');
       console.error('Unhandled Rejection at:', promise, 'Reason:', reason);
-      
+
       // Close server and exit process
       server.close(() => {
         console.log('💥 Process terminated!');

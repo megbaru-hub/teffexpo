@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Translation } from '../types';
 
@@ -13,7 +12,6 @@ const MerchantLogin: React.FC<MerchantLoginProps> = ({ t }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { merchantLogin } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +20,7 @@ const MerchantLogin: React.FC<MerchantLoginProps> = ({ t }) => {
 
     try {
       await merchantLogin(email, password);
-      navigate('/merchant-dashboard');
+      // No need to navigate manually, App.tsx handles redirect based on auth state
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

@@ -73,7 +73,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 export const getMe = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     res.status(StatusCodes.OK).json({
       success: true,
       data: user,
@@ -86,7 +86,7 @@ export const getMe = async (req: Request, res: Response, next: NextFunction) => 
 // @desc    Logout user / clear cookie
 // @route   GET /api/v1/auth/logout
 // @access  Private
-export const logout = (req: Request, res: Response) => {
+export const logout = (_req: Request, res: Response) => {
   res.cookie('token', 'none', {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,

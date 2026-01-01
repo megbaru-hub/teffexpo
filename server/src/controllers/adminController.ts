@@ -231,7 +231,7 @@ export const getMerchantBreakdown = async (req: Request, res: Response, next: Ne
 // @desc    Get all merchants (Admin only)
 // @route   GET /api/v1/admin/merchants
 // @access  Private (Admin)
-export const getAllMerchants = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllMerchants = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const merchants = await User.find({ role: 'merchant' }).select('-password');
 
