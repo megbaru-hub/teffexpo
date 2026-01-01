@@ -5,6 +5,7 @@ import { TRANSLATIONS } from './constants';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import AIAssistant from './components/AIAssistant';
 import Home from './pages/Home';
+import Products from './pages/Products';
 import Cart from './components/Cart';
 import Checkout from './components/Checkout';
 import AdminDashboard from './pages/AdminDashboard';
@@ -115,6 +116,7 @@ const App: React.FC = () => {
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Home lang={lang} t={t} />} />
+            <Route path="/products" element={<Products lang={lang} t={t} />} />
             <Route path="/cart" element={<Cart t={t} />} />
             <Route path="/checkout" element={<Checkout t={t} />} />
             

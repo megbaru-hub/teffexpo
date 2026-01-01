@@ -7,6 +7,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+  photo?: string;
   role: 'user' | 'admin' | 'merchant';
   passwordChangedAt?: Date;
   passwordResetToken?: string;
@@ -47,6 +48,10 @@ const userSchema = new Schema<IUser>(
         },
         message: 'Password must contain at least one uppercase letter, one lowercase letter, one number and one special character'
       }
+    },
+    photo: {
+      type: String,
+      default: 'default.jpg'
     },
     role: {
       type: String,

@@ -120,7 +120,32 @@ export const confirmOrder = async (req: Request, res: Response, next: NextFuncti
       return next(new ErrorResponse('This order is not assigned to you', StatusCodes.FORBIDDEN));
     }
 
+    // Decrease stock for all products assigned to this merchant
+    const merchantBreakdown = order.merchantBreakdown.find(
+      (mb) => mb.merchant.toString() === req.user.id
+    );
+
+    if (merchantBreakdown) {
+      for (const item of merchantBreakdown.items) {
+        await Product.findByIdAndUpdate(
+          item.product,
+          { $inc: { stockAvailable: -item.quantity } },
+          { new: true, runValidators: true }
+        );
+      }
+    }
+
     merchantAssignment.status = 'confirmed';
+    
+    // Check if all merchants have confirmed
+    const allMerchantsConfirmed = order.assignedToMerchants.every(
+      (a) => a.status === 'confirmed' || a.merchant.toString() === req.user.id
+    );
+
+    if (allMerchantsConfirmed) {
+      order.orderStatus = 'processing';
+    }
+
     await order.save();
 
     res.status(StatusCodes.OK).json({

@@ -27,7 +27,11 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
     }
 
     const products = await Product.find(query)
-      .populate('merchant', 'name email')
+      .populate({
+        path: 'merchant',
+        select: 'name email photo',
+        match: { active: { $ne: false } }
+      })
       .sort({ createdAt: -1 });
 
     res.status(StatusCodes.OK).json({
@@ -45,7 +49,11 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
 // @access  Public
 export const getProduct = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const product = await Product.findById(req.params.id).populate('merchant', 'name email');
+    const product = await Product.findById(req.params.id).populate({
+      path: 'merchant',
+      select: 'name email photo',
+      match: { active: { $ne: false } }
+    });
 
     if (!product) {
       return next(new ErrorResponse(`Product not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
