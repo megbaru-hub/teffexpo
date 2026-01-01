@@ -173,65 +173,154 @@ export const askTeffAssistant = async (prompt: string, language: 'am' | 'en' = '
     let response = '';
     const langKey = language as 'en' | 'am';
 
-    // Handle merchant-related questions
+    // Handle merchant and product-related questions
     if (isMerchantQuestion) {
-      try {
-        // Fetch actual merchants from the API
-        const response = await fetch('/api/v1/admin/merchants');
-        const data = await response.json();
+      // Check for specific product or merchant queries
+      const productQueryMatch = prompt.match(/(?:price|cost|how much|ዋጋ|ስንት ነው|የምን ያህል|በስንት|በስንት ነው|ስንት ነው)\s+(?:for|of|the)?\s*(white|red|mixed|brown|ነጭ|ቀይ|ሰርገኛ|ቡናማ)?\s*(?:teff|ጤፍ)?/i);
+      const merchantQueryMatch = prompt.match(/(?:merchant|seller|vendor|ሻጭ|ሻጮች|የጤፍ ሻጭ|የጤፍ ሻጮች)/i);
+      const stockQueryMatch = prompt.match(/(?:stock|available|quantity|ክምችት|ቀሪ|ቀርቷል|ቀርቷል?)/i);
+      
+      // If asking about a specific product's price or stock
+      if (productQueryMatch) {
+        const teffType = productQueryMatch[2]?.toLowerCase() || '';
+        const isPriceQuery = /(price|cost|how much|ዋጋ|ስንት ነው|የምን ያህል|በስንት)/i.test(prompt);
+        const isStockQuery = /(stock|available|quantity|ክምችት|ቀሪ|ቀርቷል)/i.test(prompt);
         
-        if (!response.ok) {
-          throw new Error(data.message || 'Failed to fetch merchants');
+        try {
+          const productsResponse = await fetch('/api/v1/products');
+          if (!productsResponse.ok) throw new Error('Failed to fetch products');
+          const { data: products } = await productsResponse.json();
+          
+          // Find matching products
+          const matchedProducts = products.filter((p: any) => 
+            p.teffType?.toLowerCase().includes(teffType) || 
+            (teffType === '' && /teff|ጤፍ/i.test(prompt))
+          );
+          
+          if (matchedProducts.length === 0) {
+            return language === 'am' 
+              ? `ይቅርታ፣ ለ"${teffType || 'ጤፍ'}" ምንም ምርቶች አልተገኙም።`
+              : `Sorry, no products found for "${teffType || 'teff'}".`;
+          }
+          
+          if (isPriceQuery) {
+            const prices = matchedProducts.map((p: any) => 
+              language === 'am'
+                ? `• ${p.teffType || 'ጤፍ'}: ${p.pricePerKilo} ብር/ኪ.ግ.`
+                : `• ${p.teffType || 'Teff'}: ${p.pricePerKilo} ETB/kg`
+            ).join('\n');
+            
+            return language === 'am'
+              ? `የ${teffType || 'ጤፍ'} ዋጋዎች፦\n${prices}`
+              : `Prices for ${teffType || 'teff'}:\n${prices}`;
+          }
+          
+          if (isStockQuery) {
+            const stockInfo = matchedProducts.map((p: any) => {
+              const status = p.stockAvailable > 20 ? '✅' : (p.stockAvailable > 0 ? '⚠️' : '❌');
+              return language === 'am'
+                ? `• ${p.teffType || 'ጤፍ'}: ${p.stockAvailable} ኪ.ግ. ${status}`
+                : `• ${p.teffType || 'Teff'}: ${p.stockAvailable} kg ${status}`;
+            }).join('\n');
+            
+            return language === 'am'
+              ? `የ${teffType || 'ጤፍ'} ክምችት፦\n${stockInfo}\n\n✅ በቂ ክምችት\n⚠️ የተወሰነ ብቻ\n❌ አልቋል`
+              : `${teffType || 'Teff'} stock availability:\n${stockInfo}\n\n✅ In stock\n⚠️ Limited\n❌ Out of stock`;
+          }
+        } catch (error) {
+          console.error('Error fetching product info:', error);
+          return language === 'am'
+            ? 'የምርት መረጃ ሲገኝ ስህተት ተፈጥሯል። እባክዎ ቆይተው ይሞክሩ።'
+            : 'An error occurred while fetching product information. Please try again later.';
+        }
+      }
+      try {
+        // Fetch all products which include merchant info
+        const productsResponse = await fetch('/api/v1/products');
+        if (!productsResponse.ok) {
+          throw new Error('Failed to fetch products');
+        }
+        const responseData = await productsResponse.json();
+        const products = Array.isArray(responseData.data) ? responseData.data : [];
+
+        // Group products by merchant
+        const merchantProducts: Record<string, any[]> = {};
+        const merchantInfo: Record<string, any> = {};
+        
+        for (const product of products) {
+          if (product.merchant) {
+            const merchantId = product.merchant._id || product.merchant;
+            if (!merchantProducts[merchantId]) {
+              merchantProducts[merchantId] = [];
+              // Store merchant info
+              if (typeof product.merchant === 'object') {
+                merchantInfo[merchantId] = product.merchant;
+              }
+            }
+            merchantProducts[merchantId].push(product);
+          }
         }
 
-        const merchants = data.data || [];
-
-        if (merchants.length === 0) {
+        const merchantIds = Object.keys(merchantProducts);
+        
+        if (merchantIds.length === 0) {
           return language === 'am'
             ? 'በአሁኑ ጊዜ ምንም የጤፍ ሻጮች አልተገኙም። እባክዎ ቆይተው ይሞክሩ።'
-            : 'There are currently no teff merchants available. Please check back later.';
+            : 'There are currently no teff merchants with products available. Please check back later.';
         }
 
+        // Header
         let responseText = language === 'am'
-          ? 'የሚገኙ የጤፍ ሻጮች፦\n\n'
-          : 'Available teff merchants and their products:\n\n';
+          ? '🌟 *የጤፍ ሻጮች እና ምርቶቻቸው* 🌾\n\n'
+          : '🌟 *Teff Merchants & Products* 🌾\n' +
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
-        // Get products for each merchant
-        for (const merchant of merchants) {
-          const productsResponse = await fetch(`/api/v1/merchants/${merchant._id}/products`);
-          const productsData = await productsResponse.json();
-          const products = productsData.data || [];
+        // Display each merchant and their products
+        for (const merchantId of merchantIds) {
+          const merchant = merchantInfo[merchantId] || { name: 'Unknown Merchant' };
+          const products = merchantProducts[merchantId] || [];
           
+          // Merchant card
           responseText += language === 'am'
-            ? `🏪 ${merchant.name || 'ሻጭ'}\n` +
-              `📍 አካባቢ: ${merchant.location || 'አልተገለጸም'}\n` +
-              `📞 ስልክ: ${merchant.phone || 'አልተገለጸም'}\n`
-            : `🏪 ${merchant.name || 'Merchant'}\n` +
-              `📍 Location: ${merchant.location || 'Not specified'}\n` +
-              `📞 Phone: ${merchant.phone || 'Not specified'}\n`;
+            ? `📦 *${merchant.name || 'ሻጭ'}*\n` +
+              '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n' +
+              (merchant.location ? `📍 *አካባቢ:* ${merchant.location}\n` : '') +
+              (merchant.phone ? `📞 *ስልክ:* ${merchant.phone}\n` : '') +
+              '\n🛍️ *ምርቶች*\n'
+            : `📦 *${merchant.name || 'Merchant'}*\n` +
+              '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n' +
+              (merchant.location ? `📍 *Location:* ${merchant.location}\n` : '') +
+              (merchant.phone ? `📞 *Phone:* ${merchant.phone}\n` : '') +
+              '\n🛍️ *Products*\n';
           
           if (products.length > 0) {
-            responseText += language === 'am'
-              ? '🛒 ምርቶች፦\n'
-              : '🛒 Products:\n';
-            
-            products.forEach((product: any) => {
+            products.forEach((product, index) => {
+              const productName = product.teffType || 'Teff';
+              const price = product.pricePerKilo || 'N/A';
+              const stock = product.stockAvailable || 0;
+              const stockStatus = stock > 20 ? '✅' : (stock > 0 ? '⚠️' : '❌');
+              const description = product.description ? `\n   ${language === 'am' ? '📝' : '📝'} ${product.description}` : '';
+              
               responseText += language === 'am'
-                ? `   • ${product.name}: ${product.price} ብር (${product.stockAvailable} ኪ.ግ. ቀሪ አለ)\n`
-                : `   • ${product.name}: ${product.price} ETB (${product.stockAvailable} kg available)\n`;
+                ? `\n${index + 1}. 🌾 *${productName}*\n` +
+                  `   💰 ዋጋ: *${price} ብር/ኪ.ግ.*\n` +
+                  `   📊 ክምችት: *${stock} ኪ.ግ.* ${stockStatus}${description}\n`
+                : `\n${index + 1}. 🌾 *${productName}*\n` +
+                  `   💰 Price: *${price} ETB/kg*\n` +
+                  `   📊 Stock: *${stock} kg* ${stockStatus}${description}\n`;
             });
           } else {
             responseText += language === 'am'
-              ? 'ℹ️ ምንም ምርቶች አልተገኙም\n\n'
-              : 'ℹ️ No products available\n\n';
+              ? '\n   ✨ ምንም ምርቶች አልተገኙም\n\n'
+              : '\n   ✨ No products available\n\n';
           }
           
           responseText += '\n';
         }
 
         responseText += language === 'am'
-          ? 'ለበለጠ መረጃ እባክዎ የተወሰነውን ሻጭ ወይም ምርት ይጠይቁ።'
-          : 'For more information, please ask about a specific merchant or product.';
+          ? 'ለበለጠ መረጃ እባክዎ የተወሰነውን ምርት ወይም ሻጭ ይጠይቁ።'
+          : 'For more information, please ask about a specific product or merchant.';
 
         return responseText;
       } catch (error) {
