@@ -143,6 +143,62 @@ export const askTeffAssistant = async (prompt: string, language: 'am' | 'en' = '
         : 'I\'m sorry, I can only provide information about teff products. Is there something you\'d like to know about teff?';
     }
 
+    // Check for general teff information questions
+    const generalTeffQuestions = {
+      en: ['what is teff', 'tell me about teff', 'about teff', 'teff information', 'teff benefits', 'teff nutrition'],
+      am: ['ጤፍ ምንድን ነው', 'ስለ ጤፍ ተናገረኝ', 'ጤፍ', 'ስለ ጤፍ መረጃ', 'የጤፍ ጥቅም', 'የጤፍ ምግባራዊ ጥቅም']
+    };
+
+    const isGeneralTeffQuestion = [...generalTeffQuestions.en, ...generalTeffQuestions.am].some(question => 
+      prompt.toLowerCase().includes(question.toLowerCase())
+    );
+
+    if (isGeneralTeffQuestion) {
+      if (language === 'am') {
+        return `🌾 *ስለ ጤፍ* 🌾
+
+ጤፍ በኢትዮጵያ እና ኤርትራ የሚገኝ የምግብ እህል ነው። በጣም ትንሽ እንደሆነ ቢሆንም በምግብ እሴቱ ከፍተኛ ነው።
+
+*ዋና ጥቅሞች*:
+• ብረታ ብረት እና ማዕድናት የበለፀገ
+• በፕሮቲን የበለፀገ
+• ብስለት የሚያገኙበት ጥሩ ምንጭ
+• በቂ ፋይበር ይዟል
+• ለስኳር በሽታ ተጋላጭ ሰዎች ተስማሚ
+
+*የሚዘጋጅበት መንገዶች*:
+• እንጀራ
+• ገንፎ
+• ቂጣ ዳቦ
+• ቲሕል
+• ተላ
+• ቆሎ
+
+ጤፍ ከሌሎች እህሎች ጋር በማደባለቅ የተለያዩ የምግብ አይነቶችን ለመስራት ይጠቅማል።`;
+      } else {
+        return `🌾 *About Teff* 🌾
+
+Teff is a tiny, but mighty grain that originates from Ethiopia and Eritrea. Despite its small size, it packs a powerful nutritional punch.
+
+*Key Benefits*:
+• Rich in essential minerals like iron and calcium
+• High in protein
+• Excellent source of fiber
+• Gluten-free
+• Low glycemic index
+
+*Common Uses*:
+• Injera (Ethiopian flatbread)
+• Porridge
+• Bread and baked goods
+• Tihlo (Ethiopian barley-like dish)
+• Tella (traditional beer)
+• Kolo (roasted grain snack)
+
+Teff is a versatile grain that can be used in both traditional and modern recipes, from breakfast porridge to protein bars and gluten-free baked goods.`;
+      }
+    }
+
     // Check for specific teff type questions
     const teffType = TEFF_INFO.types.find(type => 
       prompt.toLowerCase().includes(type.name.toLowerCase()) || 
