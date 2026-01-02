@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { cartApi, ApiError } from '../services/api';
+import { useAuth } from './AuthContext';
 
 interface CartItem {
   product: {
@@ -67,10 +68,10 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 const GUEST_CART_KEY = 'teffexpo_guest_cart';
 
 const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isAuthenticated } = useAuth();
   const [cart, setCart] = useState<Cart | null>(null);
   const [guestCart, setGuestCart] = useState<GuestCartItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Load guest cart from localStorage
   useEffect(() => {
@@ -84,14 +85,14 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   }, []);
 
-  // Check authentication status
+  // Refresh cart when authentication changes
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    setIsAuthenticated(!!token);
-    if (token) {
+    if (isAuthenticated) {
       refreshCart();
+    } else {
+      setCart(null);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const saveGuestCart = (items: GuestCartItem[]) => {
     localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
@@ -117,9 +118,7 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const addToCart = async (productId: string, quantity: number, productData?: any) => {
-    const token = localStorage.getItem('token');
-
-    if (token && isAuthenticated) {
+    if (isAuthenticated) {
       // Authenticated user - use API
       try {
         await cartApi.addToCart(productId, quantity);
@@ -172,9 +171,7 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const updateItem = async (itemIndex: number, quantity: number) => {
-    const token = localStorage.getItem('token');
-
-    if (token && isAuthenticated) {
+    if (isAuthenticated) {
       // Authenticated user - use API
       try {
         await cartApi.updateCartItem(itemIndex, quantity);
@@ -204,9 +201,7 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const removeItem = async (itemIndex: number) => {
-    const token = localStorage.getItem('token');
-
-    if (token && isAuthenticated) {
+    if (isAuthenticated) {
       // Authenticated user - use API
       try {
         await cartApi.removeFromCart(itemIndex);
