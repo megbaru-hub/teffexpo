@@ -16,10 +16,14 @@ export class ApiError extends Error {
 
 // Helper function for making API requests
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
+  const isFormData = options.body instanceof FormData;
   const headers: any = {
-    'Content-Type': 'application/json',
     ...options.headers,
   };
+
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const token = localStorage.getItem('token');
   if (token) {
@@ -178,6 +182,25 @@ export const adminApi = {
 
   // Merchants
   getAllMerchants: () => apiRequest('/admin/merchants'),
+  registerMerchant: (merchantData: any) =>
+    apiRequest('/admin/merchants', {
+      method: 'POST',
+      body: JSON.stringify(merchantData),
+    }),
+  deleteMerchant: (merchantId: string) =>
+    apiRequest(`/admin/merchants/${merchantId}`, {
+      method: 'DELETE',
+    }),
+  updateMerchant: (merchantId: string, merchantData: any) =>
+    apiRequest(`/admin/merchants/${merchantId}`, {
+      method: 'PUT',
+      body: JSON.stringify(merchantData),
+    }),
+  uploadMerchantPhoto: (formData: FormData) =>
+    apiRequest('/admin/merchants/upload', {
+      method: 'POST',
+      body: formData,
+    }),
 
   // Analytics
   getAnalytics: () => apiRequest('/admin/analytics'),

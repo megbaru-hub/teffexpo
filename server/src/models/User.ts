@@ -9,6 +9,9 @@ export interface IUser extends Document {
   password: string;
   photo?: string;
   role: 'user' | 'admin' | 'merchant';
+  phone?: string;
+  address?: string;
+  location?: string;
   passwordChangedAt?: Date;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
@@ -58,6 +61,9 @@ const userSchema = new Schema<IUser>(
       enum: ['user', 'admin', 'merchant'],
       default: 'user'
     },
+    phone: String,
+    address: String,
+    location: String,
     passwordChangedAt: Date,
     passwordResetToken: String,
     passwordResetExpires: Date,
@@ -76,15 +82,15 @@ const userSchema = new Schema<IUser>(
 userSchema.pre('save', async function (next) {
   // Only hash password if it was modified
   if (!this.isModified('password')) return next();
-  
+
   // Hash the password
   this.password = await bcrypt.hash(this.password, 12);
-  
+
   // Set passwordChangedAt only if it's NOT a new user (i.e., password was changed on existing user)
   if (!this.isNew) {
     this.passwordChangedAt = new Date(Date.now() - 1000);
   }
-  
+
   next();
 });
 
@@ -118,14 +124,14 @@ userSchema.methods.changedPasswordAfter = function (this: IUser, JWTTimestamp: n
 // Generate password reset token
 userSchema.methods.createPasswordResetToken = function (this: IUser): string {
   const resetToken = crypto.randomBytes(32).toString('hex');
-  
+
   this.passwordResetToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
-    
+
   this.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-  
+
   return resetToken;
 };
 

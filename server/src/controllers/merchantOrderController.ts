@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import Order from '../models/Order';
+import Product from '../models/Product';
 import Notification from '../models/Notification';
 import { ErrorResponse } from '../utils/errorResponse';
 
@@ -10,7 +11,7 @@ import { ErrorResponse } from '../utils/errorResponse';
 export const getMyAssignedOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
-    
+
     const query: any = {
       'assignedToMerchants.merchant': req.user.id
     };
@@ -29,7 +30,7 @@ export const getMyAssignedOrders = async (req: Request, res: Response, next: Nex
       const merchantAssignment = order.assignedToMerchants.find(
         (a) => a.merchant.toString() === req.user.id
       );
-      
+
       const merchantBreakdown = order.merchantBreakdown.find(
         (b) => b.merchant.toString() === req.user.id
       );
@@ -127,16 +128,28 @@ export const confirmOrder = async (req: Request, res: Response, next: NextFuncti
 
     if (merchantBreakdown) {
       for (const item of merchantBreakdown.items) {
-        await Product.findByIdAndUpdate(
-          item.product,
-          { $inc: { stockAvailable: -item.quantity } },
-          { new: true, runValidators: true }
-        );
+        if (!item.stockDecreased) {
+          await Product.findByIdAndUpdate(
+            item.product,
+            { $inc: { stockAvailable: -item.quantity } },
+            { new: true, runValidators: true }
+          );
+          item.stockDecreased = true;
+
+          // Also update the main items array if they match
+          const mainItem = order.items.find(i =>
+            i.product.toString() === item.product.toString() &&
+            i.merchant.toString() === item.merchant.toString()
+          );
+          if (mainItem) {
+            mainItem.stockDecreased = true;
+          }
+        }
       }
     }
 
     merchantAssignment.status = 'confirmed';
-    
+
     // Check if all merchants have confirmed
     const allMerchantsConfirmed = order.assignedToMerchants.every(
       (a) => a.status === 'confirmed' || a.merchant.toString() === req.user.id

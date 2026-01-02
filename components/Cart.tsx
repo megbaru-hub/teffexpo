@@ -81,7 +81,13 @@ const Cart: React.FC<CartProps> = ({ t }) => {
                   </button>
                   <span className="w-16 text-center font-bold">{item.quantity} {t.kilo}</span>
                   <button
-                    onClick={() => handleQuantityChange(index, item.quantity + 0.5)}
+                    onClick={() => {
+                      if (item.quantity + 0.5 > item.product.stockAvailable) {
+                        alert(`Only ${item.product.stockAvailable} kg available`);
+                        return;
+                      }
+                      handleQuantityChange(index, item.quantity + 0.5);
+                    }}
                     className="w-8 h-8 rounded-full border border-stone-200 flex items-center justify-center hover:bg-stone-50"
                   >
                     +

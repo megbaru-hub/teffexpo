@@ -118,7 +118,7 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   const addToCart = async (productId: string, quantity: number, productData?: any) => {
     const token = localStorage.getItem('token');
-    
+
     if (token && isAuthenticated) {
       // Authenticated user - use API
       try {
@@ -153,10 +153,17 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       let updatedCart: GuestCartItem[];
       if (existingIndex > -1) {
         // Update quantity
+        const newQuantity = guestCart[existingIndex].quantity + quantity;
+        if (newQuantity > productData.stockAvailable) {
+          throw new Error(`Insufficient stock. Available: ${productData.stockAvailable} kg`);
+        }
         updatedCart = [...guestCart];
-        updatedCart[existingIndex].quantity += quantity;
+        updatedCart[existingIndex].quantity = newQuantity;
       } else {
         // Add new item
+        if (quantity > productData.stockAvailable) {
+          throw new Error(`Insufficient stock. Available: ${productData.stockAvailable} kg`);
+        }
         updatedCart = [...guestCart, newItem];
       }
 
@@ -185,6 +192,12 @@ const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
 
       const updatedCart = [...guestCart];
+      if (quantity > updatedCart[itemIndex].product.stockAvailable) {
+        throw new Error(`Insufficient stock. Available: ${updatedCart[itemIndex].product.stockAvailable} kg`);
+      }
+      if (quantity <= 0) {
+        throw new Error('Quantity must be greater than zero');
+      }
       updatedCart[itemIndex].quantity = quantity;
       saveGuestCart(updatedCart);
     }

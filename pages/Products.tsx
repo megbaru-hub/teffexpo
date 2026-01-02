@@ -113,8 +113,8 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 rounded-full overflow-hidden bg-stone-100 border border-stone-200">
-                      <img 
-                        src={merchant.photo || '/default-merchant.jpg'} 
+                      <img
+                        src={merchant.photo || '/default-merchant.jpg'}
                         alt={merchant.name}
                         className="w-full h-full object-cover"
                         onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -135,8 +135,8 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                     <div key={product._id} className="flex items-center justify-between border-b border-stone-50 pb-3">
                       <div>
                         <p className="font-medium text-stone-700">
-                          {product.teffType === 'White' ? t.whiteTeff : 
-                           product.teffType === 'Red' ? t.redTeff : t.mixedTeff}
+                          {product.teffType === 'White' ? t.whiteTeff :
+                            product.teffType === 'Red' ? t.redTeff : t.mixedTeff}
                         </p>
                         <p className="text-sm text-stone-500">
                           {product.pricePerKilo} {currency} / {t.kilo}
@@ -144,18 +144,17 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                       </div>
                       <div className="text-right">
                         <p className={`text-xs mb-1 ${product.stockAvailable > 0 ? 'text-stone-400' : 'text-red-400'}`}>
-                          {product.stockAvailable > 0 
-                            ? `${product.stockAvailable} ${t.kilo} ${t.stockAvailable}` 
+                          {product.stockAvailable > 0
+                            ? `${product.stockAvailable} ${t.kilo} ${t.stockAvailable}`
                             : t.noStock}
                         </p>
                         <button
                           disabled={product.stockAvailable <= 0}
                           onClick={() => handleBuyClick(product)}
-                          className={`text-sm px-4 py-1.5 rounded-full font-bold transition-all ${
-                            product.stockAvailable > 0 
-                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-600 hover:text-white' 
+                          className={`text-sm px-4 py-1.5 rounded-full font-bold transition-all ${product.stockAvailable > 0
+                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-600 hover:text-white'
                               : 'bg-stone-100 text-stone-400 cursor-not-allowed'
-                          }`}
+                            }`}
                         >
                           {t.buyNow}
                         </button>
@@ -176,11 +175,11 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-stone-800">
-                  {selectedProduct.teffType === 'White' ? t.whiteTeff : 
-                   selectedProduct.teffType === 'Red' ? t.redTeff : t.mixedTeff}
+                  {selectedProduct.teffType === 'White' ? t.whiteTeff :
+                    selectedProduct.teffType === 'Red' ? t.redTeff : t.mixedTeff}
                 </h2>
-                <button 
-                  onClick={() => setShowModal(false)} 
+                <button
+                  onClick={() => setShowModal(false)}
                   className="text-stone-400 hover:text-stone-600 text-xl"
                 >
                   ✕
@@ -202,7 +201,13 @@ const Products: React.FC<ProductsProps> = ({ lang, t }) => {
                     <input
                       type="number"
                       value={quantity}
-                      onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setQuantity(Math.min(selectedProduct.stockAvailable, Math.max(0, val)));
+                      }}
+                      onBlur={() => {
+                        if (quantity < 0.5) setQuantity(0.5);
+                      }}
                       min={0.5}
                       max={selectedProduct.stockAvailable}
                       step={0.5}

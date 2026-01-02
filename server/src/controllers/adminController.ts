@@ -1,10 +1,37 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
+import path from 'path';
+import multer from 'multer';
 import Order from '../models/Order';
 import Notification from '../models/Notification';
 import User from '../models/User';
 import Product from '../models/Product';
 import { ErrorResponse } from '../utils/errorResponse';
+
+// Multer config
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'public/uploads/merchants');
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req: any, file: any, cb: any) => {
+  if (file.mimetype.startsWith('image')) {
+    cb(null, true);
+  } else {
+    cb(new ErrorResponse('Not an image! Please upload only images.', StatusCodes.BAD_REQUEST), false);
+  }
+};
+
+export const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: { fileSize: 1024 * 1024 * 5 } // 5MB limit
+});
 
 // @desc    Get all orders (Admin only)
 // @route   GET /api/v1/admin/orders
@@ -130,6 +157,30 @@ export const assignOrderToMerchants = async (req: Request, res: Response, next: 
     order.assignedToMerchants = assignments;
     order.orderStatus = 'assigned';
     order.assignedBy = req.user.id;
+
+    // Decrease stock for all products in order when assigning (considering this as "confirmed" by admin)
+    for (const item of order.items) {
+      if (!item.stockDecreased) {
+        const product = await Product.findById(item.product);
+        if (product) {
+          product.stockAvailable -= item.quantity;
+          if (product.stockAvailable < 0) {
+            product.stockAvailable = 0;
+          }
+          await product.save();
+          item.stockDecreased = true;
+
+          // Also update merchantBreakdown items
+          for (const mb of order.merchantBreakdown) {
+            const mbItem = mb.items.find(i => i.product.toString() === item.product.toString());
+            if (mbItem) {
+              mbItem.stockDecreased = true;
+            }
+          }
+        }
+      }
+    }
+
     await order.save();
 
     await order.populate('items.merchant', 'name email phone');
@@ -156,15 +207,26 @@ export const completeOrder = async (req: Request, res: Response, next: NextFunct
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
-    // Decrease stock for all products in order
+    // Verify or Decrease stock for all products in order
     for (const item of order.items) {
-      const product = await Product.findById(item.product);
-      if (product) {
-        product.stockAvailable -= item.quantity;
-        if (product.stockAvailable < 0) {
-          product.stockAvailable = 0;
+      if (!item.stockDecreased) {
+        const product = await Product.findById(item.product);
+        if (product) {
+          product.stockAvailable -= item.quantity;
+          if (product.stockAvailable < 0) {
+            product.stockAvailable = 0;
+          }
+          await product.save();
+          item.stockDecreased = true;
+
+          // Also update merchantBreakdown items if they exist
+          for (const mb of order.merchantBreakdown) {
+            const mbItem = mb.items.find(i => i.product.toString() === item.product.toString());
+            if (mbItem) {
+              mbItem.stockDecreased = true;
+            }
+          }
         }
-        await product.save();
       }
     }
 
@@ -244,5 +306,157 @@ export const getAllMerchants = async (_req: Request, res: Response, next: NextFu
     next(error);
   }
 };
+
+/**
+ * @desc    Register a new merchant (Admin only)
+ * @route   POST /api/v1/admin/merchants
+ * @access  Private (Admin)
+ */
+export const registerMerchant = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { name, email, password, phone, address, photo, location } = req.body;
+
+    // Check if user already exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return next(new ErrorResponse('User already exists with this email', StatusCodes.BAD_REQUEST));
+    }
+
+    // Create merchant
+    const merchant = await User.create({
+      name,
+      email,
+      password,
+      role: 'merchant',
+      phone,
+      address,
+      photo: photo || 'default.jpg',
+      location
+    });
+
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: 'Merchant registered successfully',
+      data: {
+        id: merchant._id,
+        name: merchant.name,
+        email: merchant.email,
+        role: merchant.role,
+        photo: merchant.photo,
+        location: merchant.location
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update merchant information (Admin only)
+ * @route   PUT /api/v1/admin/merchants/:id
+ * @access  Private (Admin)
+ */
+export const updateMerchant = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { name, email, phone, address, photo, location, password } = req.body;
+
+    let merchant = await User.findById(req.params.id);
+
+    if (!merchant) {
+      return next(new ErrorResponse(`Merchant not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
+    }
+
+    if (merchant.role !== 'merchant') {
+      return next(new ErrorResponse('User is not a merchant', StatusCodes.BAD_REQUEST));
+    }
+
+    // Update fields
+    const updateData: any = {
+      name: name || merchant.name,
+      email: email || merchant.email,
+      phone: phone || merchant.phone,
+      address: address || merchant.address,
+      photo: photo || merchant.photo,
+      location: location || merchant.location
+    };
+
+    // If password is provided, it will be hashed by the 'save' middleware
+    // We need to use .save() instead of .findByIdAndUpdate() for the middleware to trigger
+    merchant.name = updateData.name;
+    merchant.email = updateData.email;
+    merchant.phone = updateData.phone;
+    merchant.address = updateData.address;
+    merchant.photo = updateData.photo;
+    merchant.location = updateData.location;
+
+    if (password) {
+      merchant.password = password;
+    }
+
+    await merchant.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Merchant updated successfully',
+      data: merchant
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete a merchant (Admin only)
+ * @route   DELETE /api/v1/admin/merchants/:id
+ * @access  Private (Admin)
+ */
+export const deleteMerchant = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const merchant = await User.findById(req.params.id);
+
+    if (!merchant) {
+      return next(new ErrorResponse(`Merchant not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
+    }
+
+    if (merchant.role !== 'merchant') {
+      return next(new ErrorResponse('User is not a merchant', StatusCodes.BAD_REQUEST));
+    }
+
+    // Delete merchant
+    await User.findByIdAndDelete(req.params.id);
+
+    // Also delete merchant's products to keep DB clean
+    await Product.deleteMany({ merchant: req.params.id });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Merchant and their products deleted successfully',
+      data: {}
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Upload merchant photo (Admin only)
+ * @route   POST /api/v1/admin/merchants/upload
+ * @access  Private (Admin)
+ */
+export const uploadMerchantPhoto = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      return next(new ErrorResponse('Please upload a file', StatusCodes.BAD_REQUEST));
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: `/public/uploads/merchants/${req.file.filename}`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 

@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
+import path from 'path';
+
 // Load environment variables
-dotenv.config({ path: `${__dirname}/../.env` });
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 import express from 'express';
 import mongoose from 'mongoose';
@@ -43,6 +45,9 @@ if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < MIN_SECRET_LENGTH)
 
 // Create Express app
 const app = express();
+
+// Set static folder
+app.use('/public', express.static(path.join(__dirname, '../public')));
 
 // Security middleware
 app.use(helmet());

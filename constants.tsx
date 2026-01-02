@@ -84,7 +84,14 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     stock: "ክምችት",
     price: "ዋጋ",
     viewOnMap: "በካርታው ላይ ይመልከቱ",
-    subtotal: "ከታክስ በፊት ዋጋ"
+    subtotal: "ከታክስ በፊት ዋጋ",
+    addMerchant: "ነጋዴ ጨምር",
+    deleteMerchant: "ነጋዴ ሰርዝ",
+    editMerchant: "ነጋዴ ያርሙ",
+    merchants: "ነጋዴዎች",
+    password: "የይለፍ ቃል",
+    storeLocation: "የመደብር አድራሻ (Google Maps)",
+    photoUrl: "የፎቶ አድራሻ"
   },
   [Language.ENGLISH]: {
     title: "TeffExpo",
@@ -168,7 +175,14 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     stock: "Stock",
     price: "Price",
     viewOnMap: "View on Map",
-    subtotal: "Subtotal"
+    subtotal: "Subtotal",
+    addMerchant: "Add Merchant",
+    deleteMerchant: "Delete Merchant",
+    editMerchant: "Edit Merchant",
+    merchants: "Merchants",
+    password: "Password",
+    storeLocation: "Store Location (Google Maps)",
+    photoUrl: "Photo URL"
   }
 };
 

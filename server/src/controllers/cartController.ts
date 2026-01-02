@@ -43,6 +43,10 @@ export const addToCart = async (req: Request, res: Response, next: NextFunction)
       return next(new ErrorResponse('Product not found', StatusCodes.NOT_FOUND));
     }
 
+    if (quantity <= 0) {
+      return next(new ErrorResponse('Quantity must be greater than zero', StatusCodes.BAD_REQUEST));
+    }
+
     if (product.stockAvailable < quantity) {
       return next(new ErrorResponse(`Insufficient stock. Available: ${product.stockAvailable} kg`, StatusCodes.BAD_REQUEST));
     }

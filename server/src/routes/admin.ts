@@ -5,7 +5,12 @@ import {
   assignOrderToMerchants,
   completeOrder,
   getMerchantBreakdown,
-  getAllMerchants
+  getAllMerchants,
+  registerMerchant,
+  updateMerchant,
+  deleteMerchant,
+  uploadMerchantPhoto,
+  upload
 } from '../controllers/adminController';
 import { protect, authorize } from '../middleware/auth';
 
@@ -29,7 +34,15 @@ router.route('/orders/:id/breakdown')
   .get(getMerchantBreakdown);
 
 router.route('/merchants')
-  .get(getAllMerchants);
+  .get(getAllMerchants)
+  .post(registerMerchant);
+
+router.route('/merchants/upload')
+  .post(upload.single('photo'), uploadMerchantPhoto);
+
+router.route('/merchants/:id')
+  .put(updateMerchant)
+  .delete(deleteMerchant);
 
 export default router;
 

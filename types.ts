@@ -113,5 +113,11 @@ export interface Translation {
   price: string;
   viewOnMap: string;
   subtotal: string;
-  callCustomer: string;
+  addMerchant: string;
+  deleteMerchant: string;
+  editMerchant: string;
+  merchants: string;
+  password: string;
+  storeLocation: string;
+  photoUrl: string;
 }

@@ -20,7 +20,7 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
 
     // Get cart items from request body (for guest checkout) or from user cart
     let cartItems: any[] = [];
-    
+
     if (items && Array.isArray(items) && items.length > 0) {
       // Guest checkout - items provided in request body
       cartItems = items;
@@ -56,9 +56,13 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
       }
 
       const product = await Product.findById(productId);
-      
+
       if (!product) {
         return next(new ErrorResponse(`Product ${productId} not found`, StatusCodes.NOT_FOUND));
+      }
+
+      if (quantity <= 0) {
+        return next(new ErrorResponse(`Quantity must be greater than zero for ${product.teffType}`, StatusCodes.BAD_REQUEST));
       }
 
       if (product.stockAvailable < quantity) {

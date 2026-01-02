@@ -10,6 +10,7 @@ export interface IOrderItem {
   quantity: number; // in kilos
   pricePerKilo: number;
   subtotal: number;
+  stockDecreased?: boolean;
 }
 
 export interface IOrder extends Document {
@@ -78,6 +79,10 @@ const orderItemSchema = new Schema<IOrderItem>(
       type: Number,
       required: true,
       min: [0, 'Subtotal cannot be negative']
+    },
+    stockDecreased: {
+      type: Boolean,
+      default: false
     }
   },
   { _id: false }
