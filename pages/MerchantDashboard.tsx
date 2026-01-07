@@ -46,6 +46,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
     description: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -75,12 +76,26 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
     }
   };
 
-  const handleConfirmOrder = async (orderId: string) => {
+  const handleConfirmOrder = async (orderId: string, amount: number) => {
+    setConfirmingOrderId(orderId);
     try {
       await merchantApi.confirmOrder(orderId);
+      alert(`${t.orderConfirmed}! ${t.moneyGained}: ${amount.toLocaleString()} ETB`);
       fetchData();
     } catch (error: any) {
       alert(error.message || 'Failed to confirm order');
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  };
+
+  const handleMarkReady = async (orderId: string) => {
+    try {
+      await merchantApi.markOrderReady(orderId);
+      alert(t.readyForDelivery);
+      fetchData();
+    } catch (error: any) {
+      alert(error.message || 'Failed to mark as ready');
     }
   };
 
@@ -154,13 +169,13 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
   const stats = useMemo(() => {
     const activeOrders = orders.filter(o => o.myStatus !== 'completed').length;
     const totalRevenue = orders
-      .filter(o => o.myStatus === 'completed')
+      .filter(o => o.myStatus === 'completed' || o.myStatus === 'confirmed')
       .reduce((sum, o) => sum + (o.myAmount || 0), 0);
     const unreadNotifications = notifications.filter(n => n.status === 'unread').length;
 
     return [
       { label: t.activeOrders, value: activeOrders, icon: ShoppingBag, color: 'text-amber-600', bg: 'bg-amber-50' },
-      { label: t.totalRevenue, value: `${totalRevenue.toLocaleString()} ETB`, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+      { label: t.moneyGained, value: `${totalRevenue.toLocaleString()} ETB`, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
       { label: t.unreadAlerts, value: unreadNotifications, icon: Bell, color: 'text-blue-600', bg: 'bg-blue-50' },
       { label: t.teffTypes, value: products.length, icon: Package, color: 'text-stone-600', bg: 'bg-stone-50' },
     ];
@@ -327,8 +342,8 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-wider">#{order._id.slice(-6)}</span>
-                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${order.myStatus === 'completed' ? 'bg-emerald-50 text-emerald-700' :
-                            order.myStatus === 'confirmed' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
+                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${order.myStatus === 'confirmed' ? 'bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200' :
+                            order.myStatus === 'completed' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
                             }`}>
                             {order.myStatus}
                           </span>
@@ -351,18 +366,39 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
                       </div>
 
                       <div className="text-right px-8 border-l border-stone-50">
-                        <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Earned Amount</p>
-                        <p className="text-3xl font-black text-stone-900 tracking-tight">{order.myAmount.toLocaleString()} <span className="text-xs text-amber-600">ETB</span></p>
+                        <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">
+                          {order.myStatus === 'completed' || order.myStatus === 'confirmed' || order.myStatus === 'ready' ? t.moneyGained : t.potentialEarnings}
+                        </p>
+                        <p className={`text-3xl font-black tracking-tight ${['confirmed', 'ready', 'completed'].includes(order.myStatus) ? 'text-emerald-600' : 'text-stone-900'}`}>
+                          {order.myAmount.toLocaleString()} <span className="text-xs text-amber-600">ETB</span>
+                        </p>
                         <div className="mt-4 flex gap-2 justify-end">
-                          {order.myStatus === 'pending' || order.myStatus === 'confirmed' ? (
+                          {order.myStatus === 'pending' ? (
                             <button
-                              onClick={() => handleConfirmOrder(order._id)}
-                              className="px-6 py-3 bg-amber-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-amber-600/20 hover:bg-amber-700 active:scale-95 transition-all"
+                              disabled={confirmingOrderId === order._id}
+                              onClick={() => handleConfirmOrder(order._id, order.myAmount)}
+                              className="px-6 py-3 bg-amber-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-amber-600/20 hover:bg-amber-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
                             >
-                              {t.confirmOrder}
+                              {confirmingOrderId === order._id ? (
+                                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+                                  <RefreshCcw className="w-4 h-4" />
+                                </motion.div>
+                              ) : null}
+                              {confirmingOrderId === order._id ? 'Confirming...' : t.confirmOrder}
                             </button>
+                          ) : order.myStatus === 'confirmed' ? (
+                            <button
+                              onClick={() => handleMarkReady(order._id)}
+                              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2"
+                            >
+                              <Package className="w-4 h-4" /> {t.notifyAdmin}
+                            </button>
+                          ) : order.myStatus === 'ready' ? (
+                            <div className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-sm flex items-center gap-2 border border-indigo-100">
+                              <CheckCircle2 className="w-4 h-4" /> {t.ready}
+                            </div>
                           ) : (
-                            <div className="px-6 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black text-sm flex items-center gap-2">
+                            <div className="px-6 py-3 bg-blue-50 text-blue-600 rounded-2xl font-black text-sm flex items-center gap-2">
                               <CheckCircle2 className="w-4 h-4" /> {t.completed}
                             </div>
                           )}
@@ -373,7 +409,6 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ t }) => {
                       </div>
                     </div>
 
-                    {/* Order Items Expandable */}
                     <div className="bg-stone-50/50 p-6 px-10 border-t border-stone-50">
                       <div className="flex flex-wrap gap-4">
                         {order.myItems?.map((item: any, idx: number) => (

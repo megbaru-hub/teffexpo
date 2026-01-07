@@ -228,6 +228,8 @@ export const merchantApi = {
   getAssignedOrders: () => apiRequest('/merchant/orders'),
   confirmOrder: (orderId: string) =>
     apiRequest(`/merchant/orders/${orderId}/confirm`, { method: 'PUT' }),
+  markOrderReady: (orderId: string) =>
+    apiRequest(`/merchant/orders/${orderId}/ready`, { method: 'PUT' }),
   updateOrderStatus: (orderId: string, status: string) =>
     apiRequest(`/merchant/orders/${orderId}/status`, {
       method: 'PUT',

@@ -156,7 +156,7 @@ export const confirmOrder = async (req: Request, res: Response, next: NextFuncti
     );
 
     if (allMerchantsConfirmed) {
-      order.orderStatus = 'processing';
+      order.orderStatus = 'confirmed';
     }
 
     await order.save();
@@ -245,3 +245,37 @@ export const markAllNotificationsAsRead = async (req: Request, res: Response, ne
 };
 
 
+// @desc    Mark order as ready for delivery (Merchant)
+// @route   PUT /api/v1/merchant/orders/:id/ready
+// @access  Private (Merchant)
+export const markOrderReady = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
+    }
+
+    const merchantAssignment = order.assignedToMerchants.find(
+      (a) => a.merchant.toString() === req.user.id
+    );
+
+    if (!merchantAssignment) {
+      return next(new ErrorResponse('This order is not assigned to you', StatusCodes.FORBIDDEN));
+    }
+
+    if (merchantAssignment.status !== 'confirmed') {
+      return next(new ErrorResponse('Order must be confirmed before marking as ready', StatusCodes.BAD_REQUEST));
+    }
+
+    merchantAssignment.status = 'ready';
+    await order.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    next(error);
+  }
+};

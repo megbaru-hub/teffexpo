@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type NotificationType = 'order_assigned' | 'order_confirmed' | 'order_completed' | 'payment_received';
+export type NotificationType = 'order_assigned' | 'order_confirmed' | 'order_ready' | 'order_completed' | 'payment_received';
 export type NotificationStatus = 'unread' | 'read';
 
 export interface INotification extends Document {
@@ -25,7 +25,7 @@ const notificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ['order_assigned', 'order_confirmed', 'order_completed', 'payment_received'],
+      enum: ['order_assigned', 'order_confirmed', 'order_ready', 'order_completed', 'payment_received'],
       required: true,
       index: true
     },

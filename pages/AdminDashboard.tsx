@@ -144,8 +144,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ t }) => {
   const stats = [
     { label: 'Total Orders', value: orders.length, icon: '📦', color: 'bg-blue-50 text-blue-600' },
     { label: 'Total Merchants', value: merchants.length, icon: '🏪', color: 'bg-purple-50 text-purple-600' },
-    { label: 'Processing', value: orders.filter(o => o.orderStatus === 'processing').length, icon: '⏳', color: 'bg-amber-50 text-amber-600' },
-    { label: 'Revenue', value: `${orders.reduce((acc, current) => acc + current.totalAmount, 0).toLocaleString()} ETB`, icon: '💰', color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Active Orders', value: orders.filter(o => ['assigned', 'confirmed', 'processing'].includes(o.orderStatus)).length, icon: '⏳', color: 'bg-amber-50 text-amber-600' },
+    { label: 'Total Revenue', value: `${orders.reduce((acc, current) => acc + current.totalAmount, 0).toLocaleString()} ETB`, icon: '💰', color: 'bg-emerald-50 text-emerald-600' },
   ];
 
   return (
@@ -240,12 +240,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ t }) => {
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
                         <span className="px-3 py-1 bg-stone-100 text-stone-600 rounded-lg text-xs font-black tracking-widest uppercase">#{order._id.slice(-6)}</span>
-                        <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest uppercase shadow-sm ${order.orderStatus === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                          order.orderStatus === 'assigned' ? 'bg-blue-100 text-blue-700' :
-                            'bg-amber-100 text-amber-700'
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest uppercase shadow-sm ${order.orderStatus === 'completed' ? 'bg-blue-100 text-blue-700' :
+                          order.orderStatus === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                            order.orderStatus === 'assigned' ? 'bg-sky-100 text-sky-700' :
+                              'bg-amber-100 text-amber-700'
                           }`}>
                           {order.orderStatus}
                         </span>
+                        {order.assignedToMerchants?.length > 0 && order.assignedToMerchants.every((a: any) => a.status === 'ready' || a.status === 'completed') && order.orderStatus !== 'completed' && (
+                          <div className="px-4 py-1.5 bg-indigo-600 text-white rounded-full text-[10px] font-black tracking-widest uppercase shadow-lg shadow-indigo-500/30 flex items-center gap-2 animate-in zoom-in duration-500">
+                            <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
+                            All Ready
+                          </div>
+                        )}
                       </div>
                       <h3 className="text-2xl font-black text-stone-800 mt-2">{order.customer.name}</h3>
                       <p className="text-stone-500 font-medium flex items-center gap-2">
@@ -264,12 +271,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ t }) => {
                     <div className="p-6 bg-stone-50/50 rounded-3xl border border-stone-100">
                       <p className="text-xs text-stone-400 font-black uppercase tracking-widest mb-4">Merchant Breakdown</p>
                       <div className="space-y-3">
-                        {order.merchantBreakdown?.map((breakdown: any, idx: number) => (
-                          <div key={idx} className="flex justify-between items-center text-sm">
-                            <span className="font-bold text-stone-700">{breakdown.merchantName}</span>
-                            <span className="px-3 py-1 bg-white rounded-lg font-black text-amber-700 shadow-sm">{breakdown.amount.toLocaleString()} ETB</span>
-                          </div>
-                        ))}
+                        {order.merchantBreakdown?.map((breakdown: any, idx: number) => {
+                          const assignment = order.assignedToMerchants?.find((a: any) =>
+                            (a.merchant._id || a.merchant) === (breakdown.merchant._id || breakdown.merchant)
+                          );
+                          return (
+                            <div key={idx} className="flex justify-between items-center text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-stone-700">{breakdown.merchantName}</span>
+                                {assignment?.status === 'ready' && (
+                                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-md uppercase tracking-tight border border-indigo-200 animate-pulse">
+                                    Ready
+                                  </span>
+                                )}
+                              </div>
+                              <span className="px-3 py-1 bg-white rounded-lg font-black text-amber-700 shadow-sm">{breakdown.amount.toLocaleString()} ETB</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                     <div className="p-6 bg-stone-50/50 rounded-3xl border border-stone-100">
@@ -292,10 +311,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ t }) => {
                         {t.assignToMerchants}
                       </button>
                     )}
-                    {order.orderStatus === 'assigned' && (
+                    {(['assigned', 'confirmed', 'processing'].includes(order.orderStatus)) && (
                       <button
                         onClick={() => handleCompleteOrder(order._id)}
-                        className="bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-emerald-700 transition-all active:scale-95"
+                        className={`px-8 py-3 rounded-2xl font-black transition-all active:scale-95 text-white shadow-xl ${order.assignedToMerchants?.every((a: any) => a.status === 'ready' || a.status === 'completed') ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20' :
+                            order.orderStatus === 'confirmed' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' :
+                              order.orderStatus === 'processing' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20' : 'bg-sky-600 hover:bg-sky-700 shadow-sky-500/20'
+                          }`}
                       >
                         {t.markAsCompleted}
                       </button>

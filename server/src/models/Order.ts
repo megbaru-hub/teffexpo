@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type OrderStatus = 'pending' | 'assigned' | 'processing' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending' | 'assigned' | 'confirmed' | 'processing' | 'completed' | 'cancelled';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded';
 
 export interface IOrderItem {
@@ -29,7 +29,7 @@ export interface IOrder extends Document {
   paymentProof?: string; // URL or reference to payment proof
   assignedToMerchants: Array<{
     merchant: mongoose.Types.ObjectId;
-    status: 'pending' | 'notified' | 'confirmed' | 'completed';
+    status: 'pending' | 'notified' | 'confirmed' | 'ready' | 'completed';
     notifiedAt?: Date;
     notificationMethod?: 'phone' | 'dashboard';
     phoneCalled?: boolean;
@@ -138,7 +138,7 @@ const orderSchema = new Schema<IOrder>(
     },
     orderStatus: {
       type: String,
-      enum: ['pending', 'assigned', 'processing', 'completed', 'cancelled'],
+      enum: ['pending', 'assigned', 'confirmed', 'processing', 'completed', 'cancelled'],
       default: 'pending',
       index: true
     },
@@ -159,7 +159,7 @@ const orderSchema = new Schema<IOrder>(
       },
       status: {
         type: String,
-        enum: ['pending', 'notified', 'confirmed', 'completed'],
+        enum: ['pending', 'notified', 'confirmed', 'ready', 'completed'],
         default: 'pending'
       },
       notifiedAt: Date,

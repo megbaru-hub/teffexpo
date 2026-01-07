@@ -3,6 +3,7 @@ import {
   getMyAssignedOrders,
   getAssignedOrder,
   confirmOrder,
+  markOrderReady,
   getNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead
@@ -21,6 +22,9 @@ router.route('/orders/:id')
 
 router.route('/orders/:id/confirm')
   .put(confirmOrder);
+
+router.route('/orders/:id/ready')
+  .put(markOrderReady);
 
 router.route('/notifications')
   .get(getNotifications);

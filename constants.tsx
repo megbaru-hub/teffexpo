@@ -136,7 +136,14 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     footerAbout: "የኢትዮጵያን ባህል ከዘመናዊው ዲጂታል ዓለም ጋር ማገናኘት። ከፍተኛ ጥራት ያለው ጤፍ፣ በቀጥታ በመገኘት፣ በጥንቃቄ ቀርቧል።",
     legal: "ህጋዊ",
     termsOfService: "የአገልግሎት ውሎች",
-    privacyPolicy: "የግላዊነት ፖሊሲ"
+    privacyPolicy: "የግላዊነት ፖሊሲ",
+    potentialEarnings: "ሊገኝ የሚችል ገቢ",
+    confirmedEarnings: "የተረጋገጠ ገቢ",
+    moneyGained: "ያገኙት ገንዘብ",
+    orderConfirmed: "ትዕዛዙ ተረጋግጧል",
+    ready: "ዝግጁ",
+    readyForDelivery: "ለማድረስ ዝግጁ",
+    notifyAdmin: "ለአስተዳዳሪው ያሳውቁ"
   },
   [Language.ENGLISH]: {
     title: "TeffExpo",
@@ -273,7 +280,14 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     footerAbout: "Connecting Ethiopia's tradition to the modern digital world. Highest quality teff grain, sourced directly, delivered with care.",
     legal: "Legal",
     termsOfService: "Terms of Service",
-    privacyPolicy: "Privacy Policy"
+    privacyPolicy: "Privacy Policy",
+    potentialEarnings: "Potential Earnings",
+    confirmedEarnings: "Confirmed Earnings",
+    moneyGained: "Money Gained",
+    orderConfirmed: "Order confirmed successfully",
+    ready: "Ready",
+    readyForDelivery: "Ready for Delivery",
+    notifyAdmin: "Notify Admin"
   }
 };
 

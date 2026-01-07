@@ -166,4 +166,11 @@ export interface Translation {
   legal: string;
   termsOfService: string;
   privacyPolicy: string;
+  potentialEarnings: string;
+  confirmedEarnings: string;
+  moneyGained: string;
+  orderConfirmed: string;
+  ready: string;
+  readyForDelivery: string;
+  notifyAdmin: string;
 }
