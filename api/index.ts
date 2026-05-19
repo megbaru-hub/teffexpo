@@ -1,21 +1,17 @@
 import app from '../server/src/app';
-import mongoose from 'mongoose';
+import { prisma } from '../server/src/utils/prisma';
 
-let cachedDb: typeof mongoose | null = null;
+let connected = false;
 
 async function connectDB() {
-  if (cachedDb) return cachedDb;
-  if (!process.env.MONGODB_URI) return null;
-  cachedDb = await mongoose.connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
-    family: 4,
-  });
-  return cachedDb;
+  if (connected) return;
+  if (!process.env.DATABASE_URL) return;
+  await prisma.$connect();
+  connected = true;
 }
 
 connectDB().catch((err) => {
-  console.error('MongoDB connection error:', err);
+  console.error('Database connection error:', err);
 });
 
 export default app;

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ErrorResponse } from '../utils/errorResponse';
-import User from '../models/User';
+import { prisma } from '../utils/prisma';
 
 declare global {
   namespace Express {
@@ -11,7 +11,6 @@ declare global {
   }
 }
 
-// Protect routes
 export const protect = async (req: Request, _res: Response, next: NextFunction) => {
   try {
     let token;
@@ -20,15 +19,12 @@ export const protect = async (req: Request, _res: Response, next: NextFunction) 
       req.headers.authorization &&
       req.headers.authorization.startsWith('Bearer')
     ) {
-      // Set token from Bearer token in header
       token = req.headers.authorization.split(' ')[1];
     }
-    // Set token from cookie
     else if (req.cookies.token) {
       token = req.cookies.token;
     }
 
-    // Make sure token exists
     if (!token) {
       return next(
         new ErrorResponse('Not authorized to access this route', 401)
@@ -36,11 +32,10 @@ export const protect = async (req: Request, _res: Response, next: NextFunction) 
     }
 
     try {
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key') as { id: string };
-      const user = await User.findById(decoded.id);
+      const user = await prisma.user.findUnique({ where: { id: decoded.id } });
 
-      if (!user) {
+      if (!user || !user.active) {
         return next(
           new ErrorResponse('User no longer exists', 401)
         );
@@ -58,7 +53,6 @@ export const protect = async (req: Request, _res: Response, next: NextFunction) 
   }
 };
 
-// Grant access to specific roles
 export const authorize = (...roles: string[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {

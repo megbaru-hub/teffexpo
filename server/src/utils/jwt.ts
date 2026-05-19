@@ -5,14 +5,12 @@ const JWT_SECRET: string = process.env.JWT_SECRET || 'your_jwt_secret_key';
 const JWT_EXPIRE: string = process.env.JWT_EXPIRE || '30d';
 const JWT_COOKIE_EXPIRE: number = parseInt(process.env.JWT_COOKIE_EXPIRE || '30', 10);
 
-// Generate JWT Token
 export const generateToken = (id: string): string => {
   return jwt.sign({ id }, JWT_SECRET, {
     expiresIn: JWT_EXPIRE as string | number,
   } as SignOptions);
 };
 
-// Send JWT Token in cookie
 export const sendTokenResponse = (
   userId: string,
   statusCode: number,

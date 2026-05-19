@@ -10,7 +10,7 @@ import { protect } from '../middleware/auth';
 
 const router = Router();
 
-router.use(protect); // All cart routes require authentication
+router.use(protect);
 
 router.route('/')
   .get(getCart)
@@ -19,10 +19,8 @@ router.route('/')
 router.route('/items')
   .post(addToCart);
 
-router.route('/items/:itemIndex')
+router.route('/items/:itemId')
   .put(updateCartItem)
   .delete(removeFromCart);
 
 export default router;
-
-

@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+  MERCHANT
+}
+
+enum TeffType {
+  WHITE
+  RED
+  MIXED
+}
+
+enum OrderStatus {
+  PENDING
+  ASSIGNED
+  CONFIRMED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
+
+enum AssignmentStatus {
+  PENDING
+  NOTIFIED
+  CONFIRMED
+  READY
+  COMPLETED
+}
+
+enum NotificationType {
+  ORDER_ASSIGNED
+  ORDER_CONFIRMED
+  ORDER_READY
+  ORDER_COMPLETED
+  PAYMENT_RECEIVED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+model User {
+  id                   String                @id @default(cuid())
+  name                 String
+  email                String                @unique
+  password             String
+  photo                String                @default("default.jpg")
+  role                 Role                  @default(USER)
+  phone                String?
+  address              String?
+  location             String?
+  active               Boolean               @default(true)
+  passwordChangedAt    DateTime?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  products             Product[]
+  cart                 Cart?
+  cartItems            CartItem[]
+  orders               Order[]               @relation("UserOrders")
+  assignedOrders       OrderAssignment[]
+  createdOrders        Order[]               @relation("AssignedOrders")
+  merchantBreakdowns   MerchantBreakdown[]
+  orderItems           OrderItem[]
+  notifications        Notification[]
+}
+
+model Product {
+  id             String     @id @default(cuid())
+  merchantId     String
+  merchant       User       @relation(fields: [merchantId], references: [id])
+  teffType       TeffType
+  pricePerKilo   Float
+  stockAvailable Int        @default(0)
+  description    String?
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+
+  @@index([merchantId, teffType])
+  @@index([active])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id           String  @id @default(cuid())
+  cartId       String
+  cart         Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+  merchantId   String
+  merchant     User    @relation(fields: [merchantId], references: [id])
+  teffType     String
+  quantity     Float
+  pricePerKilo Float
+}
+
+model Order {
+  id                     String                @id @default(cuid())
+  customerName           String
+  customerPhone          String
+  customerEmail          String?
+  customerAddress        String
+  customerKebele         String
+  customerGoogleMapsLink String?
+  totalAmount            Float
+  orderStatus            OrderStatus           @default(PENDING)
+  paymentStatus          PaymentStatus         @default(PENDING)
+  paymentProof           String?
+  createdById            String?
+  createdBy              User?                 @relation("UserOrders", fields: [createdById], references: [id])
+  assignedById           String?
+  assignedBy             User?                 @relation("AssignedOrders", fields: [assignedById], references: [id])
+  completedAt            DateTime?
+  notes                  String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  items                  OrderItem[]
+  assignedToMerchants    OrderAssignment[]
+  merchantBreakdown      MerchantBreakdown[]
+  notifications          Notification[]
+
+  @@index([orderStatus, createdAt])
+  @@index([paymentStatus])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  merchantId     String
+  merchant       User     @relation(fields: [merchantId], references: [id])
+  teffType       String
+  quantity       Float
+  pricePerKilo   Float
+  subtotal       Float
+  stockDecreased Boolean  @default(false)
+}
+
+model OrderAssignment {
+  id                 String           @id @default(cuid())
+  orderId            String
+  order              Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  merchantId         String
+  merchant           User             @relation(fields: [merchantId], references: [id])
+  status             AssignmentStatus @default(PENDING)
+  notifiedAt         DateTime?
+  notificationMethod String?
+  phoneCalled        Boolean          @default(false)
+  messageSent        Boolean          @default(false)
+
+  @@index([merchantId])
+}
+
+model MerchantBreakdown {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  merchantId   String
+  merchant     User     @relation(fields: [merchantId], references: [id])
+  merchantName String
+  amount       Float
+
+  @@index([merchantId])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  orderId   String?
+  order     Order?             @relation(fields: [orderId], references: [id])
+  status    NotificationStatus @default(UNREAD)
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([orderId])
+}

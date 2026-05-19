@@ -1,78 +1,82 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import Order from '../models/Order';
-import Product from '../models/Product';
-import Notification from '../models/Notification';
+import { prisma } from '../utils/prisma';
 import { ErrorResponse } from '../utils/errorResponse';
 
-// @desc    Get merchant's assigned orders
-// @route   GET /api/v1/merchant/orders
-// @access  Private (Merchant)
 export const getMyAssignedOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
 
-    const query: any = {
-      'assignedToMerchants.merchant': req.user.id
+    const where: any = {
+      assignedToMerchants: {
+        some: { merchantId: req.user.id },
+      },
     };
 
     if (status) {
-      query.orderStatus = status;
+      where.orderStatus = (status as string).toUpperCase();
     }
 
-    const orders = await Order.find(query)
-      .populate('items.product')
-      .populate('merchantBreakdown.merchant', 'name email')
-      .sort({ createdAt: -1 });
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        items: { include: { product: true } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+        assignedToMerchants: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    // Filter to only show items for this merchant
     const filteredOrders = orders.map(order => {
       const merchantAssignment = order.assignedToMerchants.find(
-        (a) => a.merchant.toString() === req.user.id
+        (a) => a.merchantId === req.user.id
+      );
+      const merchantBreakdown = order.merchantBreakdown.find(
+        (b) => b.merchantId === req.user.id
       );
 
-      const merchantBreakdown = order.merchantBreakdown.find(
-        (b) => b.merchant.toString() === req.user.id
-      );
+      const { assignedToMerchants, ...orderData } = order;
 
       return {
-        ...order.toObject(),
+        ...orderData,
         myItems: order.items.filter(
-          (item) => item.merchant.toString() === req.user.id
+          (item) => item.merchantId === req.user.id
         ),
         myAmount: merchantBreakdown?.amount || 0,
-        myStatus: merchantAssignment?.status || 'pending',
+        myStatus: merchantAssignment?.status || 'PENDING',
         notificationMethod: merchantAssignment?.notificationMethod,
         phoneCalled: merchantAssignment?.phoneCalled,
-        messageSent: merchantAssignment?.messageSent
+        messageSent: merchantAssignment?.messageSent,
       };
     });
 
     res.status(StatusCodes.OK).json({
       success: true,
       count: filteredOrders.length,
-      data: filteredOrders
+      data: filteredOrders,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get single assigned order
-// @route   GET /api/v1/merchant/orders/:id
-// @access  Private (Merchant)
 export const getAssignedOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('items.product')
-      .populate('merchantBreakdown.merchant', 'name email');
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: { include: { product: true } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+        assignedToMerchants: true,
+      },
+    });
 
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
     const merchantAssignment = order.assignedToMerchants.find(
-      (a) => a.merchant.toString() === req.user.id
+      (a) => a.merchantId === req.user.id
     );
 
     if (!merchantAssignment) {
@@ -80,200 +84,202 @@ export const getAssignedOrder = async (req: Request, res: Response, next: NextFu
     }
 
     const merchantBreakdown = order.merchantBreakdown.find(
-      (b) => b.merchant.toString() === req.user.id
+      (b) => b.merchantId === req.user.id
     );
+
+    const { assignedToMerchants, ...orderData } = order;
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
-        ...order.toObject(),
+        ...orderData,
         myItems: order.items.filter(
-          (item) => item.merchant.toString() === req.user.id
+          (item) => item.merchantId === req.user.id
         ),
         myAmount: merchantBreakdown?.amount || 0,
         myStatus: merchantAssignment.status,
         notificationMethod: merchantAssignment.notificationMethod,
         phoneCalled: merchantAssignment.phoneCalled,
-        messageSent: merchantAssignment.messageSent
-      }
+        messageSent: merchantAssignment.messageSent,
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Confirm order assignment (Merchant)
-// @route   PUT /api/v1/merchant/orders/:id/confirm
-// @access  Private (Merchant)
 export const confirmOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        assignedToMerchants: true,
+        items: true,
+      },
+    });
 
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
     const merchantAssignment = order.assignedToMerchants.find(
-      (a) => a.merchant.toString() === req.user.id
+      (a) => a.merchantId === req.user.id
     );
 
     if (!merchantAssignment) {
       return next(new ErrorResponse('This order is not assigned to you', StatusCodes.FORBIDDEN));
     }
 
-    // Decrease stock for all products assigned to this merchant
-    const merchantBreakdown = order.merchantBreakdown.find(
-      (mb) => mb.merchant.toString() === req.user.id
+    const myItems = order.items.filter(
+      (item) => item.merchantId === req.user.id && !item.stockDecreased
     );
 
-    if (merchantBreakdown) {
-      for (const item of merchantBreakdown.items) {
-        if (!item.stockDecreased) {
-          await Product.findByIdAndUpdate(
-            item.product,
-            { $inc: { stockAvailable: -item.quantity } },
-            { new: true, runValidators: true }
-          );
-          item.stockDecreased = true;
-
-          // Also update the main items array if they match
-          const mainItem = order.items.find(i =>
-            i.product.toString() === item.product.toString() &&
-            i.merchant.toString() === item.merchant.toString()
-          );
-          if (mainItem) {
-            mainItem.stockDecreased = true;
-          }
-        }
-      }
+    for (const item of myItems) {
+      await prisma.product.update({
+        where: { id: item.productId },
+        data: { stockAvailable: { decrement: item.quantity } },
+      });
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: { stockDecreased: true },
+      });
     }
 
-    merchantAssignment.status = 'confirmed';
+    await prisma.orderAssignment.update({
+      where: { id: merchantAssignment.id },
+      data: { status: 'CONFIRMED' },
+    });
 
-    // Check if all merchants have confirmed
-    const allMerchantsConfirmed = order.assignedToMerchants.every(
-      (a) => a.status === 'confirmed' || a.merchant.toString() === req.user.id
+    const allConfirmed = order.assignedToMerchants.every(
+      (a) => a.id === merchantAssignment.id || a.status === 'CONFIRMED'
     );
 
-    if (allMerchantsConfirmed) {
-      order.orderStatus = 'confirmed';
+    if (allConfirmed) {
+      await prisma.order.update({
+        where: { id: req.params.id },
+        data: { orderStatus: 'CONFIRMED' },
+      });
     }
 
-    await order.save();
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: true,
+        assignedToMerchants: true,
+        merchantBreakdown: true,
+      },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: order
+      data: updatedOrder,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get merchant notifications
-// @route   GET /api/v1/merchant/notifications
-// @access  Private (Merchant)
+export const markOrderReady = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { assignedToMerchants: true },
+    });
+
+    if (!order) {
+      return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
+    }
+
+    const merchantAssignment = order.assignedToMerchants.find(
+      (a) => a.merchantId === req.user.id
+    );
+
+    if (!merchantAssignment) {
+      return next(new ErrorResponse('This order is not assigned to you', StatusCodes.FORBIDDEN));
+    }
+
+    if (merchantAssignment.status !== 'CONFIRMED') {
+      return next(new ErrorResponse('Order must be confirmed before marking as ready', StatusCodes.BAD_REQUEST));
+    }
+
+    await prisma.orderAssignment.update({
+      where: { id: merchantAssignment.id },
+      data: { status: 'READY' },
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getNotifications = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
-    const query: any = { user: req.user.id };
+    const where: any = { userId: req.user.id };
 
     if (status) {
-      query.status = status;
+      where.status = (status as string).toUpperCase();
     }
 
-    const notifications = await Notification.find(query)
-      .populate('order')
-      .sort({ createdAt: -1 })
-      .limit(50);
+    const notifications = await prisma.notification.findMany({
+      where,
+      include: { order: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       count: notifications.length,
-      data: notifications
+      data: notifications,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Mark notification as read
-// @route   PUT /api/v1/merchant/notifications/:id/read
-// @access  Private (Merchant)
 export const markNotificationAsRead = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const notification = await Notification.findById(req.params.id);
+    const notification = await prisma.notification.findUnique({
+      where: { id: req.params.id },
+    });
 
     if (!notification) {
       return next(new ErrorResponse(`Notification not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
-    if (notification.user.toString() !== req.user.id) {
+    if (notification.userId !== req.user.id) {
       return next(new ErrorResponse('Not authorized to update this notification', StatusCodes.FORBIDDEN));
     }
 
-    notification.status = 'read';
-    notification.readAt = new Date();
-    await notification.save();
+    const updated = await prisma.notification.update({
+      where: { id: req.params.id },
+      data: { status: 'READ', readAt: new Date() },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: notification
+      data: updated,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Mark all notifications as read
-// @route   PUT /api/v1/merchant/notifications/read-all
-// @access  Private (Merchant)
 export const markAllNotificationsAsRead = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await Notification.updateMany(
-      { user: req.user.id, status: 'unread' },
-      { status: 'read', readAt: new Date() }
-    );
-
-    res.status(StatusCodes.OK).json({
-      success: true,
-      message: 'All notifications marked as read'
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id, status: 'UNREAD' },
+      data: { status: 'READ', readAt: new Date() },
     });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-// @desc    Mark order as ready for delivery (Merchant)
-// @route   PUT /api/v1/merchant/orders/:id/ready
-// @access  Private (Merchant)
-export const markOrderReady = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const order = await Order.findById(req.params.id);
-
-    if (!order) {
-      return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
-    }
-
-    const merchantAssignment = order.assignedToMerchants.find(
-      (a) => a.merchant.toString() === req.user.id
-    );
-
-    if (!merchantAssignment) {
-      return next(new ErrorResponse('This order is not assigned to you', StatusCodes.FORBIDDEN));
-    }
-
-    if (merchantAssignment.status !== 'confirmed') {
-      return next(new ErrorResponse('Order must be confirmed before marking as ready', StatusCodes.BAD_REQUEST));
-    }
-
-    merchantAssignment.status = 'ready';
-    await order.save();
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: order
+      message: 'All notifications marked as read',
     });
   } catch (error) {
     next(error);

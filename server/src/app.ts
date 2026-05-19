@@ -1,5 +1,4 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import morgan from 'morgan';
 import helmet from 'helmet';
@@ -7,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { errorHandler } from './utils/errorResponse';
 
@@ -20,10 +19,8 @@ import merchantRoutes from './routes/merchant';
 
 const app = express();
 
-// Security middleware
 app.use(helmet());
 
-// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,

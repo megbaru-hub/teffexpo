@@ -1,34 +1,53 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import Cart from '../models/Cart';
-import Product from '../models/Product';
+import { prisma } from '../utils/prisma';
 import { ErrorResponse } from '../utils/errorResponse';
 
-// @desc    Get user cart
-// @route   GET /api/v1/cart
-// @access  Private
 export const getCart = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    let cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'teffType pricePerKilo stockAvailable merchant')
-      .populate('items.merchant', 'name email');
+    let cart = await prisma.cart.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, teffType: true, pricePerKilo: true, stockAvailable: true, merchantId: true },
+            },
+            merchant: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+    });
 
     if (!cart) {
-      cart = await Cart.create({ user: req.user.id, items: [] });
+      cart = await prisma.cart.create({
+        data: { userId: req.user.id },
+        include: {
+          items: {
+            include: {
+              product: {
+                select: { id: true, teffType: true, pricePerKilo: true, stockAvailable: true, merchantId: true },
+              },
+              merchant: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+        },
+      });
     }
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: cart
+      data: cart,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Add item to cart
-// @route   POST /api/v1/cart/items
-// @access  Private
 export const addToCart = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { productId, quantity } = req.body;
@@ -37,9 +56,8 @@ export const addToCart = async (req: Request, res: Response, next: NextFunction)
       return next(new ErrorResponse('Please provide productId and quantity', StatusCodes.BAD_REQUEST));
     }
 
-    // Get product and verify it exists and has stock
-    const product = await Product.findById(productId);
-    if (!product) {
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product || !product.active) {
       return next(new ErrorResponse('Product not found', StatusCodes.NOT_FOUND));
     }
 
@@ -51,72 +69,85 @@ export const addToCart = async (req: Request, res: Response, next: NextFunction)
       return next(new ErrorResponse(`Insufficient stock. Available: ${product.stockAvailable} kg`, StatusCodes.BAD_REQUEST));
     }
 
-    // Get or create cart
-    let cart = await Cart.findOne({ user: req.user.id });
+    let cart = await prisma.cart.findUnique({ where: { userId: req.user.id } });
     if (!cart) {
-      cart = await Cart.create({ user: req.user.id, items: [] });
+      cart = await prisma.cart.create({ data: { userId: req.user.id } });
     }
 
-    // Check if item already exists in cart
-    const existingItemIndex = cart.items.findIndex(
-      (item) => item.product.toString() === productId
-    );
+    const existingItem = await prisma.cartItem.findFirst({
+      where: { cartId: cart.id, productId },
+    });
 
-    if (existingItemIndex > -1) {
-      // Update quantity
-      const newQuantity = cart.items[existingItemIndex].quantity + quantity;
+    if (existingItem) {
+      const newQuantity = existingItem.quantity + quantity;
       if (product.stockAvailable < newQuantity) {
         return next(new ErrorResponse(`Insufficient stock. Available: ${product.stockAvailable} kg`, StatusCodes.BAD_REQUEST));
       }
-      cart.items[existingItemIndex].quantity = newQuantity;
+      await prisma.cartItem.update({
+        where: { id: existingItem.id },
+        data: { quantity: newQuantity },
+      });
     } else {
-      // Add new item
-      cart.items.push({
-        product: product._id,
-        merchant: product.merchant,
-        teffType: product.teffType,
-        quantity: quantity,
-        pricePerKilo: product.pricePerKilo
+      await prisma.cartItem.create({
+        data: {
+          cartId: cart.id,
+          productId: product.id,
+          merchantId: product.merchantId,
+          teffType: product.teffType,
+          quantity,
+          pricePerKilo: product.pricePerKilo,
+        },
       });
     }
 
-    await cart.save();
-
-    await cart.populate('items.product', 'teffType pricePerKilo stockAvailable merchant');
-    await cart.populate('items.merchant', 'name email');
+    const updatedCart = await prisma.cart.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, teffType: true, pricePerKilo: true, stockAvailable: true, merchantId: true },
+            },
+            merchant: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: cart
+      data: updatedCart,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Update cart item quantity
-// @route   PUT /api/v1/cart/items/:itemIndex
-// @access  Private
 export const updateCartItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { quantity } = req.body;
-    const itemIndex = parseInt(req.params.itemIndex);
+    const itemId = req.params.itemId;
 
     if (!quantity || quantity < 0.1) {
       return next(new ErrorResponse('Please provide a valid quantity (minimum 0.1 kg)', StatusCodes.BAD_REQUEST));
     }
 
-    const cart = await Cart.findOne({ user: req.user.id });
+    const cart = await prisma.cart.findUnique({ where: { userId: req.user.id } });
     if (!cart) {
       return next(new ErrorResponse('Cart not found', StatusCodes.NOT_FOUND));
     }
 
-    if (itemIndex < 0 || itemIndex >= cart.items.length) {
-      return next(new ErrorResponse('Invalid item index', StatusCodes.BAD_REQUEST));
+    const cartItem = await prisma.cartItem.findFirst({
+      where: { id: itemId, cartId: cart.id },
+    });
+
+    if (!cartItem) {
+      return next(new ErrorResponse('Cart item not found', StatusCodes.NOT_FOUND));
     }
 
-    // Verify stock availability
-    const product = await Product.findById(cart.items[itemIndex].product);
+    const product = await prisma.product.findUnique({ where: { id: cartItem.productId } });
     if (!product) {
       return next(new ErrorResponse('Product not found', StatusCodes.NOT_FOUND));
     }
@@ -125,72 +156,99 @@ export const updateCartItem = async (req: Request, res: Response, next: NextFunc
       return next(new ErrorResponse(`Insufficient stock. Available: ${product.stockAvailable} kg`, StatusCodes.BAD_REQUEST));
     }
 
-    cart.items[itemIndex].quantity = quantity;
-    await cart.save();
+    await prisma.cartItem.update({
+      where: { id: itemId },
+      data: { quantity },
+    });
 
-    await cart.populate('items.product', 'teffType pricePerKilo stockAvailable merchant');
-    await cart.populate('items.merchant', 'name email');
+    const updatedCart = await prisma.cart.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, teffType: true, pricePerKilo: true, stockAvailable: true, merchantId: true },
+            },
+            merchant: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: cart
+      data: updatedCart,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Remove item from cart
-// @route   DELETE /api/v1/cart/items/:itemIndex
-// @access  Private
 export const removeFromCart = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const itemIndex = parseInt(req.params.itemIndex);
+    const itemId = req.params.itemId;
 
-    const cart = await Cart.findOne({ user: req.user.id });
+    const cart = await prisma.cart.findUnique({ where: { userId: req.user.id } });
     if (!cart) {
       return next(new ErrorResponse('Cart not found', StatusCodes.NOT_FOUND));
     }
 
-    if (itemIndex < 0 || itemIndex >= cart.items.length) {
-      return next(new ErrorResponse('Invalid item index', StatusCodes.BAD_REQUEST));
+    const cartItem = await prisma.cartItem.findFirst({
+      where: { id: itemId, cartId: cart.id },
+    });
+
+    if (!cartItem) {
+      return next(new ErrorResponse('Cart item not found', StatusCodes.NOT_FOUND));
     }
 
-    cart.items.splice(itemIndex, 1);
-    await cart.save();
+    await prisma.cartItem.delete({ where: { id: itemId } });
 
-    await cart.populate('items.product', 'teffType pricePerKilo stockAvailable merchant');
-    await cart.populate('items.merchant', 'name email');
+    const updatedCart = await prisma.cart.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, teffType: true, pricePerKilo: true, stockAvailable: true, merchantId: true },
+            },
+            merchant: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: cart
+      data: updatedCart,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Clear cart
-// @route   DELETE /api/v1/cart
-// @access  Private
 export const clearCart = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id });
+    const cart = await prisma.cart.findUnique({ where: { userId: req.user.id } });
     if (!cart) {
       return next(new ErrorResponse('Cart not found', StatusCodes.NOT_FOUND));
     }
 
-    cart.items = [];
-    await cart.save();
+    await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+
+    const updatedCart = await prisma.cart.findUnique({
+      where: { userId: req.user.id },
+      include: { items: true },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: cart
+      data: updatedCart,
     });
   } catch (error) {
     next(error);
   }
 };
-
-

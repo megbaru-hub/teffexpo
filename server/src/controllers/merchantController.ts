@@ -1,27 +1,32 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import User from '../models/User';
-import Product from '../models/Product';
+import bcrypt from 'bcryptjs';
+import { prisma } from '../utils/prisma';
 import { sendTokenResponse } from '../utils/jwt';
 import { ErrorResponse } from '../utils/errorResponse';
 
-// @desc    Register merchant
-// @route   POST /api/v1/auth/merchant/register
-// @access  Public
 export const registerMerchant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, password } = req.body;
 
-    // Create merchant
-    const merchant = await User.create({
-      name,
-      email,
-      password,
-      role: 'merchant',
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return next(new ErrorResponse('User already exists with this email', StatusCodes.BAD_REQUEST));
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const merchant = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: 'MERCHANT',
+      },
     });
 
-    sendTokenResponse(merchant._id.toString(), StatusCodes.CREATED, res, {
-      id: merchant._id,
+    sendTokenResponse(merchant.id, StatusCodes.CREATED, res, {
+      id: merchant.id,
       name: merchant.name,
       email: merchant.email,
       role: merchant.role,
@@ -31,34 +36,30 @@ export const registerMerchant = async (req: Request, res: Response, next: NextFu
   }
 };
 
-// @desc    Login merchant
-// @route   POST /api/v1/auth/merchant/login
-// @access  Public
 export const loginMerchant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
 
-    // Validate email & password
     if (!email || !password) {
       return next(new ErrorResponse('Please provide an email and password', StatusCodes.BAD_REQUEST));
     }
 
-    // Check for merchant
-    const merchant = await User.findOne({ email, role: 'merchant' }).select('+password');
+    const merchant = await prisma.user.findFirst({
+      where: { email, role: 'MERCHANT' },
+    });
 
-    if (!merchant) {
+    if (!merchant || !merchant.active) {
       return next(new ErrorResponse('Invalid credentials or not a merchant account', StatusCodes.UNAUTHORIZED));
     }
 
-    // Check if password matches
-    const isMatch = await merchant.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, merchant.password);
 
     if (!isMatch) {
       return next(new ErrorResponse('Invalid credentials', StatusCodes.UNAUTHORIZED));
     }
 
-    sendTokenResponse(merchant._id.toString(), StatusCodes.OK, res, {
-      id: merchant._id,
+    sendTokenResponse(merchant.id, StatusCodes.OK, res, {
+      id: merchant.id,
       name: merchant.name,
       email: merchant.email,
       role: merchant.role,
@@ -68,17 +69,14 @@ export const loginMerchant = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-// @desc    Get current logged in merchant
-// @route   GET /api/v1/auth/merchant/me
-// @access  Private
 export const getMerchantProfile = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const merchant = await User.findById(req.user.id);
-    
-    if (!merchant || merchant.role !== 'merchant') {
+    const merchant = await prisma.user.findUnique({ where: { id: req.user.id } });
+
+    if (!merchant || merchant.role !== 'MERCHANT') {
       return next(new ErrorResponse('Merchant not found', StatusCodes.NOT_FOUND));
     }
-    
+
     res.status(StatusCodes.OK).json({
       success: true,
       data: merchant,
@@ -88,17 +86,17 @@ export const getMerchantProfile = async (req: Request, res: Response, next: Next
   }
 };
 
-// @desc    Get merchant's products
-// @route   GET /api/v1/auth/merchant/products
-// @access  Private (Merchant)
 export const getMerchantProducts = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const products = await Product.find({ merchant: req.user.id });
+    const products = await prisma.product.findMany({
+      where: { merchantId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       count: products.length,
-      data: products
+      data: products,
     });
   } catch (error) {
     next(error);

@@ -1,63 +1,55 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import Order from '../models/Order';
-import Cart from '../models/Cart';
-import Product from '../models/Product';
-import User from '../models/User';
+import { prisma } from '../utils/prisma';
 import { ErrorResponse } from '../utils/errorResponse';
 
-// @desc    Create order from cart
-// @route   POST /api/v1/orders
-// @access  Public (guest checkout allowed)
 export const createOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { customer, paymentProof, items } = req.body;
 
-    // Validate customer info
     if (!customer || !customer.name || !customer.phone || !customer.address || !customer.kebele) {
       return next(new ErrorResponse('Please provide customer name, phone, address, and kebele', StatusCodes.BAD_REQUEST));
     }
 
-    // Get cart items from request body (for guest checkout) or from user cart
     let cartItems: any[] = [];
 
     if (items && Array.isArray(items) && items.length > 0) {
-      // Guest checkout - items provided in request body
       cartItems = items;
     } else if (req.user) {
-      // Authenticated user - get cart from database
-      const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
+      const cart = await prisma.cart.findUnique({
+        where: { userId: req.user.id },
+        include: { items: { include: { product: true } } },
+      });
       if (!cart || cart.items.length === 0) {
         return next(new ErrorResponse('Cart is empty', StatusCodes.BAD_REQUEST));
       }
-      cartItems = cart.items;
+      cartItems = cart.items.map(item => ({
+        product: { id: item.productId, ...item.product },
+        quantity: item.quantity,
+        pricePerKilo: item.pricePerKilo,
+      }));
     } else {
       return next(new ErrorResponse('Cart is empty. Please provide items or login to use your cart.', StatusCodes.BAD_REQUEST));
     }
 
-    // Validate all products and stock, and calculate totals
-    const orderItems = [];
-    const merchantMap = new Map();
+    const orderItemsData: any[] = [];
+    const merchantMap = new Map<string, { merchantId: string; items: any[]; amount: number }>();
     let totalAmount = 0;
 
     for (const cartItem of cartItems) {
-      // Handle both database cart items and guest cart items
-      let productId: any;
+      let productId: string;
       let quantity: number;
 
-      if (cartItem.product?._id) {
-        // Database cart item
-        productId = cartItem.product._id;
+      if (cartItem.product?.id) {
+        productId = cartItem.product.id;
         quantity = cartItem.quantity;
       } else {
-        // Guest cart item from request body
         productId = cartItem.productId || cartItem.product;
         quantity = cartItem.quantity;
       }
 
-      const product = await Product.findById(productId);
-
-      if (!product) {
+      const product = await prisma.product.findUnique({ where: { id: productId } });
+      if (!product || !product.active) {
         return next(new ErrorResponse(`Product ${productId} not found`, StatusCodes.NOT_FOUND));
       }
 
@@ -69,131 +61,134 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
         return next(new ErrorResponse(`Insufficient stock for ${product.teffType}. Available: ${product.stockAvailable} kg`, StatusCodes.BAD_REQUEST));
       }
 
-      // Use product price from database (not from request to prevent price manipulation)
       const finalPricePerKilo = product.pricePerKilo;
       const subtotal = quantity * finalPricePerKilo;
       totalAmount += subtotal;
 
-      orderItems.push({
-        product: product._id,
-        merchant: product.merchant,
+      orderItemsData.push({
+        productId: product.id,
+        merchantId: product.merchantId,
         teffType: product.teffType,
-        quantity: quantity,
+        quantity,
         pricePerKilo: finalPricePerKilo,
-        subtotal: subtotal
+        subtotal,
       });
 
-      // Group by merchant for breakdown
-      const merchantIdStr = product.merchant.toString();
-      if (!merchantMap.has(merchantIdStr)) {
-        merchantMap.set(merchantIdStr, {
-          merchant: product.merchant,
+      if (!merchantMap.has(product.merchantId)) {
+        merchantMap.set(product.merchantId, {
+          merchantId: product.merchantId,
           items: [],
-          amount: 0
+          amount: 0,
         });
       }
-      merchantMap.get(merchantIdStr).items.push({
-        product: product._id,
-        merchant: product.merchant,
+      const entry = merchantMap.get(product.merchantId)!;
+      entry.items.push({
+        productId: product.id,
+        merchantId: product.merchantId,
         teffType: product.teffType,
-        quantity: quantity,
+        quantity,
         pricePerKilo: finalPricePerKilo,
-        subtotal: subtotal
+        subtotal,
       });
-      merchantMap.get(merchantIdStr).amount += subtotal;
+      entry.amount += subtotal;
     }
 
-    // Get merchant names for breakdown
-    const merchantBreakdown = [];
+    const merchantBreakdownData = [];
     for (const [merchantId, data] of merchantMap.entries()) {
-      const merchant = await User.findById(merchantId);
-      merchantBreakdown.push({
-        merchant: data.merchant,
+      const merchant = await prisma.user.findUnique({ where: { id: merchantId } });
+      merchantBreakdownData.push({
+        merchantId: data.merchantId,
         merchantName: merchant?.name || 'Unknown',
         amount: data.amount,
-        items: data.items
       });
     }
 
-    // Create order
-    const order = await Order.create({
-      customer: {
-        name: customer.name,
-        phone: customer.phone,
-        email: customer.email,
-        address: customer.address,
-        kebele: customer.kebele,
-        googleMapsLink: customer.googleMapsLink
+    const order = await prisma.order.create({
+      data: {
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        customerAddress: customer.address,
+        customerKebele: customer.kebele,
+        customerGoogleMapsLink: customer.googleMapsLink,
+        totalAmount,
+        paymentStatus: paymentProof ? 'PAID' : 'PENDING',
+        paymentProof,
+        createdById: req.user?.id,
+        orderStatus: 'PENDING',
+        items: {
+          create: orderItemsData,
+        },
+        merchantBreakdown: {
+          create: merchantBreakdownData.map(mb => ({
+            merchantId: mb.merchantId,
+            merchantName: mb.merchantName,
+            amount: mb.amount,
+          })),
+        },
       },
-      items: orderItems,
-      totalAmount: totalAmount,
-      paymentStatus: paymentProof ? 'paid' : 'pending',
-      paymentProof: paymentProof,
-      merchantBreakdown: merchantBreakdown,
-      createdBy: req.user?.id,
-      orderStatus: 'pending'
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+      },
     });
 
-    // Clear cart if user is authenticated
     if (req.user) {
-      const cart = await Cart.findOne({ user: req.user.id });
+      const cart = await prisma.cart.findUnique({ where: { userId: req.user.id } });
       if (cart) {
-        cart.items = [];
-        await cart.save();
+        await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
       }
     }
-
-    await order.populate('items.merchant', 'name email');
-    await order.populate('merchantBreakdown.merchant', 'name email');
 
     res.status(StatusCodes.CREATED).json({
       success: true,
-      data: order
+      data: order,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get user orders
-// @route   GET /api/v1/orders
-// @access  Private
 export const getMyOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const orders = await Order.find({ createdBy: req.user.id })
-      .populate('items.merchant', 'name email')
-      .populate('merchantBreakdown.merchant', 'name email')
-      .sort({ createdAt: -1 });
+    const orders = await prisma.order.findMany({
+      where: { createdById: req.user.id },
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       count: orders.length,
-      data: orders
+      data: orders,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get single order
-// @route   GET /api/v1/orders/:id
-// @access  Private
 export const getOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('items.merchant', 'name email')
-      .populate('merchantBreakdown.merchant', 'name email')
-      .populate('assignedToMerchants.merchant', 'name email phone');
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true } } } },
+        assignedToMerchants: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+      },
+    });
 
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
-    // Check if user has access (created the order, is admin, or is assigned merchant)
-    const isCreator = order.createdBy?.toString() === req.user.id;
-    const isAdmin = req.user.role === 'admin';
+    const isCreator = order.createdById === req.user.id;
+    const isAdmin = req.user.role === 'ADMIN';
     const isAssignedMerchant = order.assignedToMerchants.some(
-      (assignment) => assignment.merchant.toString() === req.user.id
+      (a) => a.merchantId === req.user.id
     );
 
     if (!isCreator && !isAdmin && !isAssignedMerchant) {
@@ -202,10 +197,9 @@ export const getOrder = async (req: Request, res: Response, next: NextFunction) 
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: order
+      data: order,
     });
   } catch (error) {
     next(error);
   }
 };
-

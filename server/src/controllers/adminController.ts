@@ -3,10 +3,8 @@ import { StatusCodes } from 'http-status-codes';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import Order from '../models/Order';
-import Notification from '../models/Notification';
-import User from '../models/User';
-import Product from '../models/Product';
+import { prisma } from '../utils/prisma';
+import bcrypt from 'bcryptjs';
 import { ErrorResponse } from '../utils/errorResponse';
 
 cloudinary.config({
@@ -29,48 +27,50 @@ export const upload = multer({
   limits: { fileSize: 1024 * 1024 * 5 },
 });
 
-// @desc    Get all orders (Admin only)
-// @route   GET /api/v1/admin/orders
-// @access  Private (Admin)
 export const getAllOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, paymentStatus } = req.query;
-    const query: any = {};
+    const where: any = {};
 
     if (status) {
-      query.orderStatus = status;
+      where.orderStatus = (status as string).toUpperCase();
     }
 
     if (paymentStatus) {
-      query.paymentStatus = paymentStatus;
+      where.paymentStatus = (paymentStatus as string).toUpperCase();
     }
 
-    const orders = await Order.find(query)
-      .populate('items.merchant', 'name email phone')
-      .populate('merchantBreakdown.merchant', 'name email phone')
-      .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 });
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       count: orders.length,
-      data: orders
+      data: orders,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get order details with merchant breakdown (Admin only)
-// @route   GET /api/v1/admin/orders/:id
-// @access  Private (Admin)
 export const getOrderDetails = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('items.merchant', 'name email phone')
-      .populate('merchantBreakdown.merchant', 'name email phone')
-      .populate('assignedToMerchants.merchant', 'name email phone')
-      .populate('createdBy', 'name email');
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        assignedToMerchants: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+    });
 
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
@@ -78,196 +78,199 @@ export const getOrderDetails = async (req: Request, res: Response, next: NextFun
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: order
+      data: order,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Assign order to merchants (Admin only)
-// @route   POST /api/v1/admin/orders/:id/assign
-// @access  Private (Admin)
 export const assignOrderToMerchants = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { merchantIds, notificationMethod } = req.body; // notificationMethod: 'phone' | 'dashboard' | 'both'
+    const { merchantIds, notificationMethod } = req.body;
 
     if (!merchantIds || !Array.isArray(merchantIds) || merchantIds.length === 0) {
       return next(new ErrorResponse('Please provide merchant IDs array', StatusCodes.BAD_REQUEST));
     }
 
-    const order = await Order.findById(req.params.id);
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { merchantBreakdown: true, items: true },
+    });
+
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
-    if (order.orderStatus === 'completed' || order.orderStatus === 'cancelled') {
+    if (order.orderStatus === 'COMPLETED' || order.orderStatus === 'CANCELLED') {
       return next(new ErrorResponse('Cannot assign completed or cancelled order', StatusCodes.BAD_REQUEST));
     }
 
-    // Validate merchants exist and are merchants
-    const merchants = await User.find({
-      _id: { $in: merchantIds },
-      role: 'merchant'
+    const merchants = await prisma.user.findMany({
+      where: { id: { in: merchantIds }, role: 'MERCHANT' },
     });
 
     if (merchants.length !== merchantIds.length) {
       return next(new ErrorResponse('Some merchants not found or invalid', StatusCodes.BAD_REQUEST));
     }
 
-    // Create assignments for each merchant
-    const assignments = [];
+    const assignments: any[] = [];
+
     for (const merchant of merchants) {
-      // Check if merchant has items in this order
       const hasItems = order.merchantBreakdown.some(
-        (breakdown) => breakdown.merchant.toString() === merchant._id.toString()
+        (b) => b.merchantId === merchant.id
       );
 
-      if (!hasItems) {
-        continue; // Skip merchants that don't have items in this order
-      }
+      if (!hasItems) continue;
 
-      const assignment = {
-        merchant: merchant._id,
-        status: 'pending' as const,
+      assignments.push({
+        merchantId: merchant.id,
+        status: 'PENDING',
         notificationMethod: notificationMethod === 'both' ? 'dashboard' : (notificationMethod || 'dashboard'),
         phoneCalled: notificationMethod === 'phone' || notificationMethod === 'both',
-        messageSent: notificationMethod === 'dashboard' || notificationMethod === 'both'
-      };
+        messageSent: notificationMethod === 'dashboard' || notificationMethod === 'both',
+      });
 
-      assignments.push(assignment);
-
-      // Create notification for merchant (if dashboard message)
       if (notificationMethod === 'dashboard' || notificationMethod === 'both') {
-        await Notification.create({
-          user: merchant._id,
-          type: 'order_assigned',
-          title: 'New Order Assigned',
-          message: `You have a new order #${order._id} assigned to you. Total amount: ${order.merchantBreakdown.find(b => b.merchant.toString() === merchant._id.toString())?.amount || 0} ETB`,
-          order: order._id,
-          status: 'unread'
+        const breakdown = order.merchantBreakdown.find(b => b.merchantId === merchant.id);
+        await prisma.notification.create({
+          data: {
+            userId: merchant.id,
+            type: 'ORDER_ASSIGNED',
+            title: 'New Order Assigned',
+            message: `You have a new order #${order.id} assigned to you. Total amount: ${breakdown?.amount || 0} ETB`,
+            orderId: order.id,
+            status: 'UNREAD',
+          },
         });
       }
     }
 
-    order.assignedToMerchants = assignments;
-    order.orderStatus = 'assigned';
-    order.assignedBy = req.user.id;
+    await prisma.orderAssignment.createMany({ data: assignments });
 
-    // Decrease stock for all products in order when assigning (considering this as "confirmed" by admin)
     for (const item of order.items) {
       if (!item.stockDecreased) {
-        const product = await Product.findById(item.product);
+        const product = await prisma.product.findUnique({ where: { id: item.productId } });
         if (product) {
-          product.stockAvailable -= item.quantity;
-          if (product.stockAvailable < 0) {
-            product.stockAvailable = 0;
-          }
-          await product.save();
-          item.stockDecreased = true;
-
-          // Also update merchantBreakdown items
-          for (const mb of order.merchantBreakdown) {
-            const mbItem = mb.items.find(i => i.product.toString() === item.product.toString());
-            if (mbItem) {
-              mbItem.stockDecreased = true;
-            }
-          }
+          const newStock = Math.max(0, product.stockAvailable - item.quantity);
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { stockAvailable: newStock },
+          });
+          await prisma.orderItem.update({
+            where: { id: item.id },
+            data: { stockDecreased: true },
+          });
         }
       }
     }
 
-    await order.save();
+    await prisma.order.update({
+      where: { id: req.params.id },
+      data: {
+        orderStatus: 'ASSIGNED',
+        assignedById: req.user.id,
+      },
+    });
 
-    await order.populate('items.merchant', 'name email phone');
-    await order.populate('merchantBreakdown.merchant', 'name email phone');
-    await order.populate('assignedToMerchants.merchant', 'name email phone');
+    const updated = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        assignedToMerchants: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+      },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: order,
-      message: `Order assigned to ${assignments.length} merchant(s). ${notificationMethod === 'phone' || notificationMethod === 'both' ? 'Please call them to notify.' : ''}`
+      data: updated,
+      message: `Order assigned to ${assignments.length} merchant(s). ${notificationMethod === 'phone' || notificationMethod === 'both' ? 'Please call them to notify.' : ''}`,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Mark order as completed (Admin only)
-// @route   PUT /api/v1/admin/orders/:id/complete
-// @access  Private (Admin)
 export const completeOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { items: true, assignedToMerchants: true },
+    });
+
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
     }
 
-    // Verify or Decrease stock for all products in order
     for (const item of order.items) {
       if (!item.stockDecreased) {
-        const product = await Product.findById(item.product);
+        const product = await prisma.product.findUnique({ where: { id: item.productId } });
         if (product) {
-          product.stockAvailable -= item.quantity;
-          if (product.stockAvailable < 0) {
-            product.stockAvailable = 0;
-          }
-          await product.save();
-          item.stockDecreased = true;
-
-          // Also update merchantBreakdown items if they exist
-          for (const mb of order.merchantBreakdown) {
-            const mbItem = mb.items.find(i => i.product.toString() === item.product.toString());
-            if (mbItem) {
-              mbItem.stockDecreased = true;
-            }
-          }
+          const newStock = Math.max(0, product.stockAvailable - item.quantity);
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { stockAvailable: newStock },
+          });
+          await prisma.orderItem.update({
+            where: { id: item.id },
+            data: { stockDecreased: true },
+          });
         }
       }
     }
 
-    // Update order status
-    order.orderStatus = 'completed';
-    order.completedAt = new Date();
+    await prisma.order.update({
+      where: { id: req.params.id },
+      data: {
+        orderStatus: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
 
-    // Update merchant assignments
+    await prisma.orderAssignment.updateMany({
+      where: { orderId: req.params.id },
+      data: { status: 'COMPLETED' },
+    });
+
     for (const assignment of order.assignedToMerchants) {
-      assignment.status = 'completed';
-    }
-
-    await order.save();
-
-    // Create notifications for merchants
-    for (const assignment of order.assignedToMerchants) {
-      await Notification.create({
-        user: assignment.merchant,
-        type: 'order_completed',
-        title: 'Order Completed',
-        message: `Order #${order._id} has been completed. Your payment will be processed.`,
-        order: order._id,
-        status: 'unread'
+      await prisma.notification.create({
+        data: {
+          userId: assignment.merchantId,
+          type: 'ORDER_COMPLETED',
+          title: 'Order Completed',
+          message: `Order #${order.id} has been completed. Your payment will be processed.`,
+          orderId: order.id,
+          status: 'UNREAD',
+        },
       });
     }
 
-    await order.populate('items.merchant', 'name email phone');
-    await order.populate('merchantBreakdown.merchant', 'name email phone');
+    const updated = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+      },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: order
+      data: updated,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get merchant payment breakdown (Admin only)
-// @route   GET /api/v1/admin/orders/:id/breakdown
-// @access  Private (Admin)
 export const getMerchantBreakdown = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('merchantBreakdown.merchant', 'name email phone');
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        merchantBreakdown: { include: { merchant: { select: { id: true, name: true, email: true, phone: true } } } },
+      },
+    });
 
     if (!order) {
       return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
@@ -276,169 +279,131 @@ export const getMerchantBreakdown = async (req: Request, res: Response, next: Ne
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
-        orderId: order._id,
+        orderId: order.id,
         totalAmount: order.totalAmount,
-        merchantBreakdown: order.merchantBreakdown
-      }
+        merchantBreakdown: order.merchantBreakdown,
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get all merchants (Admin only)
-// @route   GET /api/v1/admin/merchants
-// @access  Private (Admin)
 export const getAllMerchants = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const merchants = await User.find({ role: 'merchant' }).select('-password');
+    const merchants = await prisma.user.findMany({
+      where: { role: 'MERCHANT' },
+      select: { id: true, name: true, email: true, photo: true, phone: true, address: true, location: true, active: true, createdAt: true },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       count: merchants.length,
-      data: merchants
+      data: merchants,
     });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * @desc    Register a new merchant (Admin only)
- * @route   POST /api/v1/admin/merchants
- * @access  Private (Admin)
- */
 export const registerMerchant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, password, phone, address, photo, location } = req.body;
 
-    // Check if user already exists
-    const userExists = await User.findOne({ email });
+    const userExists = await prisma.user.findUnique({ where: { email } });
     if (userExists) {
       return next(new ErrorResponse('User already exists with this email', StatusCodes.BAD_REQUEST));
     }
 
-    // Create merchant
-    const merchant = await User.create({
-      name,
-      email,
-      password,
-      role: 'merchant',
-      phone,
-      address,
-      photo: photo || 'default.jpg',
-      location
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const merchant = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: 'MERCHANT',
+        phone,
+        address,
+        photo: photo || 'default.jpg',
+        location,
+      },
     });
 
     res.status(StatusCodes.CREATED).json({
       success: true,
       message: 'Merchant registered successfully',
       data: {
-        id: merchant._id,
+        id: merchant.id,
         name: merchant.name,
         email: merchant.email,
         role: merchant.role,
         photo: merchant.photo,
-        location: merchant.location
-      }
+        location: merchant.location,
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * @desc    Update merchant information (Admin only)
- * @route   PUT /api/v1/admin/merchants/:id
- * @access  Private (Admin)
- */
 export const updateMerchant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, phone, address, photo, location, password } = req.body;
 
-    let merchant = await User.findById(req.params.id);
+    const merchant = await prisma.user.findUnique({ where: { id: req.params.id } });
 
-    if (!merchant) {
-      return next(new ErrorResponse(`Merchant not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
+    if (!merchant || merchant.role !== 'MERCHANT') {
+      return next(new ErrorResponse('Merchant not found', StatusCodes.NOT_FOUND));
     }
 
-    if (merchant.role !== 'merchant') {
-      return next(new ErrorResponse('User is not a merchant', StatusCodes.BAD_REQUEST));
-    }
-
-    // Update fields
-    const updateData: any = {
-      name: name || merchant.name,
-      email: email || merchant.email,
-      phone: phone || merchant.phone,
-      address: address || merchant.address,
-      photo: photo || merchant.photo,
-      location: location || merchant.location
-    };
-
-    // If password is provided, it will be hashed by the 'save' middleware
-    // We need to use .save() instead of .findByIdAndUpdate() for the middleware to trigger
-    merchant.name = updateData.name;
-    merchant.email = updateData.email;
-    merchant.phone = updateData.phone;
-    merchant.address = updateData.address;
-    merchant.photo = updateData.photo;
-    merchant.location = updateData.location;
-
+    const updateData: any = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (phone) updateData.phone = phone;
+    if (address) updateData.address = address;
+    if (photo) updateData.photo = photo;
+    if (location) updateData.location = location;
     if (password) {
-      merchant.password = password;
+      updateData.password = await bcrypt.hash(password, 12);
     }
 
-    await merchant.save();
+    const updated = await prisma.user.update({
+      where: { id: req.params.id },
+      data: updateData,
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       message: 'Merchant updated successfully',
-      data: merchant
+      data: updated,
     });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * @desc    Delete a merchant (Admin only)
- * @route   DELETE /api/v1/admin/merchants/:id
- * @access  Private (Admin)
- */
 export const deleteMerchant = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const merchant = await User.findById(req.params.id);
+    const merchant = await prisma.user.findUnique({ where: { id: req.params.id } });
 
-    if (!merchant) {
-      return next(new ErrorResponse(`Merchant not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND));
+    if (!merchant || merchant.role !== 'MERCHANT') {
+      return next(new ErrorResponse('Merchant not found', StatusCodes.NOT_FOUND));
     }
 
-    if (merchant.role !== 'merchant') {
-      return next(new ErrorResponse('User is not a merchant', StatusCodes.BAD_REQUEST));
-    }
-
-    // Delete merchant
-    await User.findByIdAndDelete(req.params.id);
-
-    // Also delete merchant's products to keep DB clean
-    await Product.deleteMany({ merchant: req.params.id });
+    await prisma.product.deleteMany({ where: { merchantId: req.params.id } });
+    await prisma.user.delete({ where: { id: req.params.id } });
 
     res.status(StatusCodes.OK).json({
       success: true,
       message: 'Merchant and their products deleted successfully',
-      data: {}
+      data: {},
     });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * @desc    Upload merchant photo (Admin only)
- * @route   POST /api/v1/admin/merchants/upload
- * @access  Private (Admin)
- */
 export const uploadMerchantPhoto = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.file) {
@@ -448,12 +413,9 @@ export const uploadMerchantPhoto = async (req: Request, res: Response, next: Nex
     const file = req.file as any;
     res.status(StatusCodes.OK).json({
       success: true,
-      data: file.path
+      data: file.path,
     });
   } catch (error) {
     next(error);
   }
 };
-
-
-
