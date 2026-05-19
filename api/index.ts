@@ -1,13 +1,17 @@
-import express from 'express';
+import app from './app';
+import { prisma } from './utils/prisma';
 
-const app = express();
+let connected = false;
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'success', message: 'Server is running' });
-});
+async function connectDB() {
+  if (connected) return;
+  if (!process.env.DATABASE_URL) return;
+  await prisma.$connect();
+  connected = true;
+}
 
-app.get('*', (req, res) => {
-  res.send('OK');
+connectDB().catch((err) => {
+  console.error('Database connection error:', err);
 });
 
 export default app;
