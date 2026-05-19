@@ -336,7 +336,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ t }) => {
                 <div className="relative">
                   <div className="flex items-center gap-6 mb-8">
                     <img
-                      src={merchant.photo || '/public/uploads/merchants/default.jpg'}
+                      src={merchant.photo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(merchant.name || 'User') + '&background=cc9c4a&color=fff'}
                       alt={merchant.name}
                       className="h-24 w-24 object-cover rounded-[2rem] border-4 border-white shadow-xl group-hover:scale-105 transition-transform"
                     />

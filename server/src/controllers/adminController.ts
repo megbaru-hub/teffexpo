@@ -1,36 +1,32 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import path from 'path';
 import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import Order from '../models/Order';
 import Notification from '../models/Notification';
 import User from '../models/User';
 import Product from '../models/Product';
 import { ErrorResponse } from '../utils/errorResponse';
 
-// Multer config
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'public/uploads/merchants');
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const fileFilter = (req: any, file: any, cb: any) => {
-  if (file.mimetype.startsWith('image')) {
-    cb(null, true);
-  } else {
-    cb(new ErrorResponse('Not an image! Please upload only images.', StatusCodes.BAD_REQUEST), false);
-  }
-};
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async () => ({
+    folder: 'teffexpo/merchants',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    transformation: [{ width: 500, height: 500, crop: 'limit' }],
+  }),
+});
 
 export const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: { fileSize: 1024 * 1024 * 5 } // 5MB limit
+  storage,
+  limits: { fileSize: 1024 * 1024 * 5 },
 });
 
 // @desc    Get all orders (Admin only)
@@ -449,9 +445,10 @@ export const uploadMerchantPhoto = async (req: Request, res: Response, next: Nex
       return next(new ErrorResponse('Please upload a file', StatusCodes.BAD_REQUEST));
     }
 
+    const file = req.file as any;
     res.status(StatusCodes.OK).json({
       success: true,
-      data: `/public/uploads/merchants/${req.file.filename}`
+      data: file.path
     });
   } catch (error) {
     next(error);
