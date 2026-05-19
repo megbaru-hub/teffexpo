@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npx prisma generate && npx prisma db push --skip-generate && npm run build",
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "framework": "vite",
