@@ -24,7 +24,7 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
         return next(new ErrorResponse('Cart is empty', StatusCodes.BAD_REQUEST));
       }
       cartItems = cart.items.map(item => ({
-        product: { id: item.productId, ...item.product },
+        product: { ...item.product },
         quantity: item.quantity,
         pricePerKilo: item.pricePerKilo,
       }));
